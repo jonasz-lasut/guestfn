@@ -70,7 +70,7 @@ sigstore-verify = { version = "0.16.0", default-features = false, features = ["a
 sigstore-trust-root = { version = "0.16.0", default-features = false, features = ["aws-lc-rs", "tuf", "rustls"] }
 sigstore-tuf = { version = "0.16.0", default-features = false, features = ["client", "aws-lc-rs"] }
 # The TUF client takes the time it validates metadata at as a jiff timestamp.
-jiff = "0.2"
+jiff = "1.0"
 sigstore-types = "0.16.0"
 rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem", "x509-parser"], optional = true }
 x509-cert = { version = "0.3", optional = true }
