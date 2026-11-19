@@ -257,7 +257,9 @@ mod tests {
         Credentials {
             source: Some(credentials::Source::CredentialData(CredentialData {
                 data: HashMap::from([("k".to_string(), value.to_vec())]),
+                ..Default::default()
             })),
+            ..Default::default()
         }
     }
 
@@ -393,6 +395,7 @@ mod tests {
                     ..Default::default()
                 },
             )]),
+            ..Default::default()
         };
         let context = json_to_struct(
             serde_json::json!({"apiextensions.crossplane.io/environment": {"region": "eu"}})
@@ -432,13 +435,23 @@ mod tests {
         let meta = ResponseMeta {
             tag: "t".to_string(),
             ttl: None,
+            ..Default::default()
         }
         .encode_to_vec();
         let out = noop_response(&raw, &meta);
 
         let decoded = RunFunctionResponse::decode(out.as_slice()).expect("decode");
         assert_eq!(decoded.meta.expect("meta").tag, "t");
-        assert_eq!(decoded.desired, Some(desired));
+        // The typed view holds the unknown field too, since the SDK keeps
+        // the fields it does not know.
+        assert_ne!(decoded.desired, Some(desired));
+        assert_eq!(
+            decoded.desired,
+            Some(
+                function_sdk_rust::proto::v1::State::decode(desired_bytes.as_slice())
+                    .expect("a State")
+            )
+        );
         assert_eq!(decoded.context, Some(context));
         assert!(decoded.results.is_empty());
         assert!(out.windows(unknown.len()).any(|w| w == unknown));
@@ -515,6 +528,7 @@ mod tests {
         let meta = ResponseMeta {
             tag: "t".to_string(),
             ttl: None,
+            ..Default::default()
         }
         .encode_to_vec();
         let out = append_meta(guest.clone(), &meta);

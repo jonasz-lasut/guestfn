@@ -103,6 +103,7 @@ impl<E: Engine> WasmFunction<E> {
                 seconds: self.ttl.as_secs() as i64,
                 nanos: self.ttl.subsec_nanos() as i32,
             }),
+            ..Default::default()
         }
     }
 }
@@ -961,6 +962,7 @@ mod tests {
                     "bucket".to_string(),
                     resource(serde_json::json!({"kind": "Bucket"})),
                 )]),
+                ..Default::default()
             }),
             input: Some(resource::json_to_struct(input.as_object().expect("object"))),
             context: Some(resource::json_to_struct(
@@ -1206,7 +1208,11 @@ mod tests {
                 (
                     name.to_string(),
                     Credentials {
-                        source: Some(credentials::Source::CredentialData(CredentialData { data })),
+                        source: Some(credentials::Source::CredentialData(CredentialData {
+                            data,
+                            ..Default::default()
+                        })),
+                        ..Default::default()
                     },
                 )
             })
@@ -1341,8 +1347,7 @@ mod tests {
             credentials: std::collections::HashMap::from([(
                 "registry".to_string(),
                 Credentials {
-                    source: Some(credentials::Source::CredentialData(CredentialData { data })),
-                },
+                    source: Some(credentials::Source::CredentialData(CredentialData { data, ..Default::default() })), ..Default::default() },
             )]),
             ..Default::default()
         };
@@ -1384,8 +1389,7 @@ mod tests {
             credentials: std::collections::HashMap::from([(
                 "registry".to_string(),
                 Credentials {
-                    source: Some(credentials::Source::CredentialData(CredentialData { data: wrong })),
-                },
+                    source: Some(credentials::Source::CredentialData(CredentialData { data: wrong, ..Default::default() })), ..Default::default() },
             )]),
             ..Default::default()
         };
@@ -1680,7 +1684,9 @@ mod tests {
                     .iter()
                     .map(|(k, v)| (k.to_string(), v.as_bytes().to_vec()))
                     .collect(),
+                ..Default::default()
             })),
+            ..Default::default()
         };
         // (name, the one credential the request carries: its name and its
         // content, the refusal)
@@ -1694,7 +1700,10 @@ mod tests {
             (
                 "NoData",
                 "registry",
-                Credentials { source: None },
+                Credentials {
+                    source: None,
+                    ..Default::default()
+                },
                 r#"cannot get credentials "registry" for module.oci: the request carries no such credential"#,
             ),
             (
@@ -1833,6 +1842,7 @@ mod tests {
                 .iter()
                 .map(|(n, v)| (n.to_string(), resource_of(v.clone())))
                 .collect(),
+            ..Default::default()
         }
     }
 
@@ -2038,6 +2048,7 @@ when { context.change == "add" };"#;
             r#match: Some(
                 function_sdk_rust::proto::v1::resource_selector::Match::MatchName(name.to_string()),
             ),
+            ..Default::default()
         }
     }
 
@@ -2148,9 +2159,11 @@ when { context has name };"#;
                                 .into_iter()
                                 .map(|(k, v)| (k.to_string(), v.to_string()))
                                 .collect(),
+                            ..Default::default()
                         },
                     ),
                 ),
+                ..Default::default()
             },
         )]);
         let (dir, bytes) = fenced_stage(&rsp, &[]);
@@ -2257,6 +2270,7 @@ when { context has name };"#;
             meta: Some(ResponseMeta {
                 tag: "guest".to_string(),
                 ttl: None,
+                ..Default::default()
             }),
             ..Default::default()
         };

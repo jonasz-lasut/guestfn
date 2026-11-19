@@ -164,6 +164,7 @@ fn request() -> Vec<u8> {
                 (name.clone(), object("Bucket", &name))
             })
             .collect(),
+        ..Default::default()
     };
     RunFunctionRequest {
         meta: Some(RequestMeta {

@@ -1494,9 +1494,9 @@ dependencies = [
 
 [[package]]
 name = "function-sdk-rust"
-version = "0.4.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e041d62c05af86101bbd1be71ddea86228881428b1a9b0464ee8dc80a7ecbe3"
+checksum = "1eae018f841eb2bb9a078fd228cf4e6c181c181cd01715b62c2429fcd219f43f"
 dependencies = [
  "bytes",
  "clap",
@@ -1504,7 +1504,7 @@ dependencies = [
  "http-body",
  "pbjson",
  "pbjson-types",
- "prometheus-client 0.25.2",
+ "prometheus-client",
  "prost",
  "rustls",
  "serde",
@@ -1764,7 +1764,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "hex",
- "prometheus-client 0.26.0",
+ "prometheus-client",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -3441,18 +3441,6 @@ dependencies = [
 
 [[package]]
 name = "prometheus-client"
-version = "0.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d150ad7bf80e60f45769d18a0a8c01028ab8f56355f33ed7bfce3a31f82e696"
-dependencies = [
- "dtoa",
- "itoa",
- "parking_lot",
- "prometheus-client-derive-encode",
-]
-
-[[package]]
-name = "prometheus-client"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f021d42d29841d029b61b45a25a7ef94feaf1d744913e59665103333a56045b8"
@@ -4744,7 +4732,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

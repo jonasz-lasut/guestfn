@@ -381,6 +381,7 @@ fn response(greeting: &str) -> RunFunctionResponse {
                 seconds: 60,
                 nanos: 0,
             }),
+            ..Default::default()
         }),
         desired: Some(State {
             resources: [(
@@ -426,6 +427,7 @@ fn fatal_response() -> RunFunctionResponse {
                 seconds: 60,
                 nanos: 0,
             }),
+            ..Default::default()
         }),
         results: vec![FnResult {
             severity: Severity::Fatal as i32,
@@ -579,6 +581,7 @@ fn run_guest(guest: &str) {
                     Capability::Capabilities as i32,
                     Capability::Conditions as i32,
                 ],
+                ..Default::default()
             }),
             input: Some(resource::json_to_struct(input.as_object().expect("object"))),
             observed: Some(State {

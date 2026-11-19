@@ -13,7 +13,7 @@ bytes = "1"
 flate2 = "1"
 cedar-policy = "4"
 clap = { version = "4", features = ["derive", "env"] }
-function-sdk-rust = "0.4.0"
+function-sdk-rust = "0.6.0"
 # The trait the runtime is generic over; the binaries supply the engine
 # (crates/function-wasm, crates/function-oci). The Wasmtime engine is here
 # for the testing module alone (feature testutil).

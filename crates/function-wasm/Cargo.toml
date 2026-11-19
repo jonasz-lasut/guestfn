@@ -16,7 +16,7 @@ guestfn-runtime = { path = "../function" }
 # `function validate`, and what --debug and RUST_LOG turn on.
 [dev-dependencies]
 base64 = "0.23"
-function-sdk-rust = "0.4.0"
+function-sdk-rust = "0.6.0"
 guestfn-engine = { path = "../engine" }
 guestfn-runtime = { path = "../function", features = ["testutil"] }
 hex = "0.4"

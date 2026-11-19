@@ -400,6 +400,7 @@ mod tests {
                     .map(|_| (self.string(), self.bytes()))
                     .collect(),
                 ready: self.below(4) as i32,
+                ..Default::default()
             }
         }
 
@@ -409,12 +410,14 @@ mod tests {
                 resources: (0..self.below(4))
                     .map(|_| (self.string(), self.resource()))
                     .collect(),
+                ..Default::default()
             }
         }
 
         fn resources(&mut self) -> Resources {
             Resources {
                 items: (0..self.below(3)).map(|_| self.resource()).collect(),
+                ..Default::default()
             }
         }
 
@@ -423,6 +426,7 @@ mod tests {
                 meta: (!self.chance(6)).then(|| RequestMeta {
                     tag: self.string(),
                     capabilities: (0..self.below(4)).map(|_| self.below(6) as i32).collect(),
+                    ..Default::default()
                 }),
                 observed: (!self.chance(6)).then(|| self.state()),
                 desired: (!self.chance(6)).then(|| self.state()),
@@ -438,9 +442,16 @@ mod tests {
                                 data: (0..self.below(3))
                                     .map(|_| (self.string(), self.bytes()))
                                     .collect(),
+                                ..Default::default()
                             })
                         });
-                        (self.string(), Credentials { source })
+                        (
+                            self.string(),
+                            Credentials {
+                                source,
+                                ..Default::default()
+                            },
+                        )
                     })
                     .collect(),
                 required_resources: (0..self.below(2))
@@ -450,10 +461,12 @@ mod tests {
                     .map(|_| {
                         let schema = function_sdk_rust::proto::v1::Schema {
                             openapi_v3: (!self.chance(3)).then(|| self.object(2)),
+                            ..Default::default()
                         };
                         (self.string(), schema)
                     })
                     .collect(),
+                ..Default::default()
             }
         }
 
@@ -469,8 +482,10 @@ mod tests {
                         labels: (0..self.below(3))
                             .map(|_| (self.string(), self.string()))
                             .collect(),
+                        ..Default::default()
                     })),
                 },
+                ..Default::default()
             }
         }
 
@@ -482,6 +497,7 @@ mod tests {
                         seconds: self.next() as i64,
                         nanos: self.next() as i32,
                     }),
+                    ..Default::default()
                 }),
                 desired: (!self.chance(6)).then(|| self.state()),
                 results: (0..self.below(3))
@@ -490,6 +506,7 @@ mod tests {
                         message: self.string(),
                         reason: self.chance(2).then(|| self.string()),
                         target: self.chance(2).then(|| self.below(4) as i32),
+                        ..Default::default()
                     })
                     .collect(),
                 context: (!self.chance(3)).then(|| self.object(2)),
@@ -505,10 +522,12 @@ mod tests {
                             let selector = SchemaSelector {
                                 api_version: self.string(),
                                 kind: self.string(),
+                                ..Default::default()
                             };
                             (self.string(), selector)
                         })
                         .collect(),
+                    ..Default::default()
                 }),
                 conditions: (0..self.below(3))
                     .map(|_| Condition {
@@ -517,9 +536,11 @@ mod tests {
                         reason: self.string(),
                         message: self.chance(2).then(|| self.string()),
                         target: self.chance(2).then(|| self.below(4) as i32),
+                        ..Default::default()
                     })
                     .collect(),
                 output: self.chance(2).then(|| self.object(2)),
+                ..Default::default()
             }
         }
     }
@@ -932,7 +953,9 @@ mod tests {
                     Credentials {
                         source: Some(credentials::Source::CredentialData(CredentialData {
                             data: HashMap::from([("token".to_string(), token.to_vec())]),
+                            ..Default::default()
                         })),
+                        ..Default::default()
                     },
                 )]),
                 ..Default::default()

@@ -35,7 +35,7 @@ tonic = "0.14"
 tower = { version = "0.5", features = ["util"] }
 
 [dev-dependencies]
-function-sdk-rust = "0.4.0"
+function-sdk-rust = "0.6.0"
 # The crate's own tests use its testing module.
 guestfn-engine-oci = { path = ".", features = ["testutil"] }
 prost = "0.14"

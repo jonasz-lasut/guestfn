@@ -221,7 +221,9 @@ fn request(input: &serde_json::Value, n: usize, credential: bool) -> Vec<u8> {
             Credentials {
                 source: Some(credentials::Source::CredentialData(CredentialData {
                     data: HashMap::from([("token".to_string(), vec![b'x'; 32])]),
+                    ..Default::default()
                 })),
+                ..Default::default()
             },
         );
     }
@@ -233,10 +235,12 @@ fn request(input: &serde_json::Value, n: usize, credential: bool) -> Vec<u8> {
         observed: Some(State {
             composite: Some(resource(xr())),
             resources: observed,
+            ..Default::default()
         }),
         desired: Some(State {
             composite: Some(resource(xr())),
             resources: desired,
+            ..Default::default()
         }),
         input: Some(serde_json::from_value(input.clone()).expect("a Struct")),
         credentials: step,

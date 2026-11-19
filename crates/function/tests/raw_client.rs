@@ -199,7 +199,9 @@ fn credential_entry(name: &str) -> Vec<u8> {
             Credentials {
                 source: Some(credentials::Source::CredentialData(CredentialData {
                     data: HashMap::from([("token".to_string(), format!("{name} secret").into())]),
+                    ..Default::default()
                 })),
+                ..Default::default()
             },
         )]),
         ..Default::default()

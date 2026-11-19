@@ -32,8 +32,8 @@ fn response_bytes() -> Vec<u8> {
         results: vec![FnResult {
             severity: Severity::Normal as i32,
             message: "ok".to_string(),
-            reason: None,
             target: Some(Target::Composite as i32),
+            ..Default::default()
         }],
         ..Default::default()
     }

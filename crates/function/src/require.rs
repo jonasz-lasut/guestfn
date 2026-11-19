@@ -80,6 +80,7 @@ mod tests {
             kind: kind.to_string(),
             namespace: None,
             r#match: m,
+            ..Default::default()
         }
     }
 
@@ -130,6 +131,7 @@ mod tests {
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect(),
+                ..Default::default()
             })),
         );
         let rsp = response(
