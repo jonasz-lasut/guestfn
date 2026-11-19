@@ -32,7 +32,10 @@ struct Fixture {
 
 fn answer(tag: String) -> Result<Response<RunFunctionResponse>, Status> {
     Ok(Response::new(RunFunctionResponse {
-        meta: Some(ResponseMeta { tag, ttl: None }),
+        meta: Some(ResponseMeta {
+            tag,
+            ..Default::default()
+        }),
         ..Default::default()
     }))
 }

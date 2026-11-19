@@ -1,9 +1,10 @@
 //! The changes a module's response makes to the request's desired state -
 //! what the composeResource fence judges (#174). One pure function over the
 //! two decoded `State`s the runtime already holds: no Cedar, no I/O, so it
-//! is tested without an engine. A `Resource` compares by value (pbjson's
-//! `Struct` is a map with `PartialEq`), so a guest that re-encodes the
-//! request's desired state with its maps in another order changed nothing.
+//! is tested without an engine. A `Resource` compares by the value of the
+//! fields this proto knows (pbjson's `Struct` is a map with `PartialEq`), so
+//! a guest that re-encodes the request's desired state with its maps in
+//! another order changed nothing.
 
 use std::collections::BTreeSet;
 
@@ -107,8 +108,26 @@ fn diff(before: Option<&Resource>, after: Option<&Resource>) -> Option<ChangeKin
         (None, None) => None,
         (None, Some(_)) => Some(ChangeKind::Add),
         (Some(_), None) => Some(ChangeKind::Remove),
-        (Some(b), Some(a)) => (b != a).then_some(ChangeKind::Modify),
+        (Some(b), Some(a)) => (!same(b, a)).then_some(ChangeKind::Modify),
     }
+}
+
+/// Whether two resources are the same by body, connection details and ready
+/// flag, which is what the policy reference says a modify is read from
+/// (docs/operators/cedar-policy.md). A `Resource` also keeps the fields its
+/// proto does not know; no rule could name one, and a guest built on an
+/// older proto returns the resource without them, so they are not compared.
+/// Every field is named here, so one a later proto adds is a decision.
+fn same(before: &Resource, after: &Resource) -> bool {
+    let Resource {
+        resource,
+        connection_details,
+        ready,
+        unknown_fields: _,
+    } = before;
+    *resource == after.resource
+        && *connection_details == after.connection_details
+        && *ready == after.ready
 }
 
 /// The resource body's group and kind: apiVersion before its last `/`, or
@@ -156,6 +175,7 @@ mod tests {
                 .iter()
                 .map(|(n, r)| (n.to_string(), r.clone()))
                 .collect::<HashMap<_, _>>(),
+            ..Default::default()
         }
     }
 
@@ -191,6 +211,21 @@ mod tests {
         assert_eq!(group_of("policy/v1beta1"), "policy");
         assert_eq!(group_of("nop.crossplane.io/v1alpha1"), "nop.crossplane.io");
         assert_eq!(group_of("/v1"), "core");
+    }
+
+    #[test]
+    fn a_field_this_proto_does_not_know_is_no_change() {
+        use prost::Message;
+
+        // Field 999 of Resource, which a guest on an older proto drops.
+        let mut bytes = deployment(2).encode_to_vec();
+        bytes.extend_from_slice(&[0xba, 0x3e, 0x03, b'x', b'y', b'z']);
+        let newer = Resource::decode(bytes.as_slice()).expect("decode");
+        assert_ne!(newer, deployment(2), "the type keeps the field");
+
+        let before = state(&[("deployment", newer.clone())], Some(newer));
+        let after = state(&[("deployment", deployment(2))], Some(deployment(2)));
+        assert_eq!(changes(Some(&before), Some(&after), None), Ok(vec![]));
     }
 
     #[test]

@@ -47,7 +47,7 @@ module's schema, is a fatal result before anything runs.
 ## 3. Running
 
 Each request runs in a fresh instance. The module receives the caller's
-request bytes, less every step credential it wasn't granted. It gets WASI
+request, less every step credential it wasn't granted. It gets WASI
 without network access. The filesystem is a private `/tmp` removed after the
 request, and the environment variables are those its manifest binds to step
 credentials, if the three layers granted them.

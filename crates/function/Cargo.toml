@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The runtime behind the function-wasm and function-oci packages, generic over the engine: the Input admission, the module resolver and caches, the manifest, the policy layers, the raw gRPC service and the offline validator"
+description = "The runtime behind the function-wasm and function-oci packages, generic over the engine: the Input admission, the module resolver and caches, the manifest, the policy layers, the gRPC service and the offline validator"
 publish = false
 
 [dependencies]
@@ -13,7 +13,7 @@ bytes = "1"
 flate2 = "1"
 cedar-policy = "4"
 clap = { version = "4", features = ["derive", "env"] }
-function-sdk-rust = "0.4.0"
+function-sdk-rust = "0.6.0"
 # The trait the runtime is generic over; the binaries supply the engine
 # (crates/function-wasm, crates/function-oci). The Wasmtime engine is here
 # for the testing module alone (feature testutil).
@@ -33,9 +33,6 @@ jsonschema = { version = "0.61", default-features = false, features = ["idna"] }
 tempfile = "3"
 pbjson-types = "0.9"
 prost = "0.14"
-# The descriptor types, to read the schema the SDK embeds (partial.rs);
-# tonic-reflection already links them.
-prost-types = "0.14"
 # query and json: the registry client's token request and response; the
 # sigstore 0.14 crate used to enable them transitively.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "gzip", "query", "json"] }

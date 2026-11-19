@@ -2,7 +2,7 @@
 
 * Owner: @jonasz-lasut (Jonasz Małecki)
 * Reviewers: function-wasm maintainers
-* Status: implemented, revision 2.8 (revision 2.8 has the sweep skip the root filesystem of an image function-oci has in memory. Revision 2.7 keys the compiled tier per process, the cache key record's design. Revision 2.6 puts the manifests tier to use, perf-02 of the performance audit under the F-5 rule. Revision 2.5 states the cache posture of the 1.0 audit's F-5, and 2.4 the compiled tier's trust boundary. Revision 2.3 rewrote the record in the present tense over the Rust workspace, where warm-up loads its entries one after another and skips the signature check, which every request makes before it reads a cache)
+* Status: implemented, revision 2.9 (revision 2.9 answers `RunFunction` with `UNAVAILABLE` until warm-up ends, where an early request was served cold. Revision 2.8 has the sweep skip the root filesystem of an image function-oci has in memory. Revision 2.7 keys the compiled tier per process, the cache key record's design. Revision 2.6 puts the manifests tier to use, perf-02 of the performance audit under the F-5 rule. Revision 2.5 states the cache posture of the 1.0 audit's F-5, and 2.4 the compiled tier's trust boundary. Revision 2.3 rewrote the record in the present tense over the Rust workspace, where warm-up loads its entries one after another and skips the signature check, which every request makes before it reads a cache)
 
 function-wasm keeps its caches on disk under one fixed directory, every entry
 addressed by a content digest, plus a bounded in-memory tier for compiled
@@ -176,8 +176,9 @@ signed is never served where a signature is required. The order:
 1. The caches open. A failure here refuses to start.
 2. The gRPC and health servers start listening, both reporting not serving.
    A probe reads not-ready rather than a refused connection, and a request that
-   arrives early is served cold or joins the load already in flight for its
-   digest.
+   arrives early is answered `UNAVAILABLE` (`the function is not ready`), as
+   function-sdk-rust's own server answers one (Jonasz, 2026-11-19). Its
+   caller retries. Before that decision such a request was served cold.
 3. With `--cosign-trust-instance`, the first trusted-root fetch runs, bounded
    and logged on failure, because a warmed module may need it.
 4. The entries load one after another.

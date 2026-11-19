@@ -4,14 +4,13 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "What the engines of guestfn share: the Engine trait the runtime holds them to, the ceilings, the run slots, the metrics, the egress seam, the raw gRPC codec and the image layout writer"
+description = "What the engines of guestfn share: the Engine trait the runtime holds them to, the ceilings, the run slots, the metrics, the egress seam and the image layout writer"
 publish = false
 
 [dependencies]
-# The pass-through gRPC codec, shared by the runtime's server and the OCI
-# engine's client.
-bytes = "1"
-tonic = "0.14"
+# The messages an engine runs a module on: the request it is handed and
+# the response it hands back.
+function-sdk-rust = "0.6.0"
 # The writing half of the OCI image layout, shared by the runtime's resolver
 # and the OCI engine's fixtures: a tar of blobs by digest.
 hex = "0.4"

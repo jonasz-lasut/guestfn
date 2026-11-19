@@ -4,6 +4,10 @@
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
+use function_sdk_rust::proto::v1::{
+    RequestMeta, ResponseMeta, RunFunctionRequest, RunFunctionResponse,
+};
+
 use crate::Error;
 use crate::protocol::{Description, Exit};
 
@@ -229,6 +233,35 @@ pub fn image_layout(config: &[u8], layers: &[(&str, &[u8])]) -> Result<Vec<u8>, 
     .map_err(|e| Error(e.to_string()))?;
     w.manifest(&manifest, OCI_MANIFEST_TYPE);
     w.finish()
+}
+
+/// A request a test tells from another by its tag.
+pub fn request(tag: &str) -> RunFunctionRequest {
+    RunFunctionRequest {
+        meta: Some(RequestMeta {
+            tag: tag.to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+/// The response of a function that echoes a request of that tag.
+pub fn answer(tag: &str) -> RunFunctionResponse {
+    RunFunctionResponse {
+        meta: Some(ResponseMeta {
+            tag: tag.to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+/// What a function that echoes answers the spec's request with. It takes
+/// the request, as a sandbox's one call does.
+pub fn echo(spec: &VmSpec<'_>) -> RunFunctionResponse {
+    let request = spec.request.take();
+    answer(&request.meta.map(|m| m.tag).unwrap_or_default())
 }
 
 /// A sandbox that records every run's description and answers with what

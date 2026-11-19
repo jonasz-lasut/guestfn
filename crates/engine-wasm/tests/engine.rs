@@ -32,8 +32,8 @@ fn response_bytes() -> Vec<u8> {
         results: vec![FnResult {
             severity: Severity::Normal as i32,
             message: "ok".to_string(),
-            reason: None,
             target: Some(Target::Composite as i32),
+            ..Default::default()
         }],
         ..Default::default()
     }
@@ -50,8 +50,59 @@ fn fixed_response_round_trip() {
     let e = engine();
     let rsp = response_bytes();
     let m = compile(&e, &fixed_component(&rsp));
-    let out = e.run(&m, b"anything", RunOptions::default()).expect("run");
+    let out = e
+        .run_bytes(&m, b"anything", RunOptions::default())
+        .expect("run");
     assert_eq!(out, rsp);
+}
+
+/// The engine's own `run`, as the runtime calls it: the request is encoded
+/// for the guest (an echo returns it, read back as a response) and the
+/// guest's bytes come back decoded, with every field it wrote.
+#[test]
+fn the_engine_runs_a_module_on_messages() {
+    use function_sdk_rust::proto::v1::{RequestMeta, ResponseMeta, RunFunctionRequest};
+    use guestfn_engine::Engine;
+
+    let e = engine();
+    let m = e
+        .compile(&guestfn_engine_wasm::testing::echo_component())
+        .expect("compile");
+    let request = RunFunctionRequest {
+        meta: Some(RequestMeta {
+            tag: "t".to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let out = Engine::run(&e, &m, request, RunOptions::default()).expect("run");
+    assert_eq!(
+        out,
+        RunFunctionResponse {
+            meta: Some(ResponseMeta {
+                tag: "t".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    );
+}
+
+/// Bytes that are no RunFunctionResponse are the module's failure, of a
+/// kind of its own and in prost's words.
+#[test]
+fn a_response_that_does_not_decode_is_a_run_error() {
+    use guestfn_engine::Engine;
+
+    let e = engine();
+    // Field 1 (meta) announcing more bytes than follow.
+    let bytes = [0x0a, 0x7f, 0x01];
+    let m = compile(&e, &fixed_component(&bytes));
+    let want = RunFunctionResponse::decode(&bytes[..]).expect_err("refused");
+    let err =
+        Engine::run(&e, &m, Default::default(), RunOptions::default()).expect_err("no response");
+    assert_eq!(err.kind(), RunFailure::Undecodable);
+    assert_eq!(err.message(), format!("cannot decode response: {want}"));
 }
 
 /// A core module - whatever it exports, ABI v1's shape or none - is refused
@@ -98,7 +149,7 @@ fn a_run_observes_the_hostcall_split() {
     let m = compile(&e, &fixed_component(&response_bytes()));
     let name = "guestfn_module_hostcall_duration_seconds";
     let before = guestfn_engine::metrics::sample(name, &[]).unwrap_or(0.0);
-    e.run(&m, b"", RunOptions::default()).expect("run");
+    e.run_bytes(&m, b"", RunOptions::default()).expect("run");
     // Other tests' runs share the process-global registry, so the count is
     // only monotonic: this run added at least its own observation.
     let after = guestfn_engine::metrics::sample(name, &[]).expect("series registered");
@@ -131,7 +182,7 @@ fn the_stack_limit_bounds_recursion() {
 
     let e = engine();
     let m = compile(&e, &wat);
-    e.run(&m, b"", RunOptions::default())
+    e.run_bytes(&m, b"", RunOptions::default())
         .expect("fits in the default stack");
 
     let small = Wasmtime::new(Config {
@@ -141,7 +192,7 @@ fn the_stack_limit_bounds_recursion() {
     .expect("engine");
     let m = compile(&small, &wat);
     let err = small
-        .run(&m, b"", RunOptions::default())
+        .run_bytes(&m, b"", RunOptions::default())
         .expect_err("should overflow");
     assert_eq!(err.to_string(), "run failed: trap: call stack exhausted");
 }
@@ -173,7 +224,7 @@ fn run_deadline() {
         timeout: Some(Duration::from_millis(50)),
         ..Default::default()
     };
-    let err = e.run(&m, b"", opts).expect_err("should time out");
+    let err = e.run_bytes(&m, b"", opts).expect_err("should time out");
     assert_eq!(
         err.to_string(),
         "run failed: module exceeded its execution deadline (50ms)"
@@ -193,7 +244,7 @@ fn the_deadline_stops_a_sleeping_guest() {
         ..Default::default()
     };
     let started = Instant::now();
-    let err = e.run(&m, b"", opts).expect_err("should time out");
+    let err = e.run_bytes(&m, b"", opts).expect_err("should time out");
     assert_eq!(
         err.to_string(),
         "run failed: module exceeded its execution deadline (100ms)"
@@ -211,7 +262,7 @@ fn the_deadline_stops_a_sleeping_guest() {
         ..Default::default()
     };
     let started = Instant::now();
-    let err = e.run(&m, b"", opts).expect_err("should time out");
+    let err = e.run_bytes(&m, b"", opts).expect_err("should time out");
     assert!(
         err.to_string()
             .starts_with("run failed: module exceeded its execution deadline"),
@@ -229,7 +280,7 @@ fn the_deadline_stops_a_sleeping_guest() {
         timeout: Some(Duration::from_secs(5)),
         ..Default::default()
     };
-    e.run(&short, b"", opts).expect("a short sleep");
+    e.run_bytes(&short, b"", opts).expect("a short sleep");
 }
 
 /// A guest that exits through WASI (`wasi:cli/exit`, what a language's
@@ -249,7 +300,7 @@ fn run_exit_status() {
     );
     let m = compile(&e, &wat);
     let err = e
-        .run(&m, b"", RunOptions::default())
+        .run_bytes(&m, b"", RunOptions::default())
         .expect_err("should exit");
     assert_eq!(err.to_string(), "run failed: module exited with status 1");
     assert_eq!(err.kind(), RunFailure::Stopped);
@@ -282,7 +333,7 @@ fn guest_error_string() {
     let e = engine();
     let m = compile(&e, &failing_guest("boom"));
     let err = e
-        .run(&m, b"", RunOptions::default())
+        .run_bytes(&m, b"", RunOptions::default())
         .expect_err("guest error");
     assert_eq!(err.to_string(), "run returned an error: boom");
     assert_eq!(err.kind(), RunFailure::Returned);
@@ -295,7 +346,7 @@ fn a_guest_error_that_names_the_deadline_is_no_timeout() {
     let e = engine();
     let said = "module exceeded its execution deadline (1s)";
     let m = compile(&e, &failing_guest(said));
-    let result = e.run(&m, b"", RunOptions::default());
+    let result = e.run_bytes(&m, b"", RunOptions::default());
     assert_eq!(
         guestfn_engine::metrics::run_outcome(&result),
         guestfn_engine::metrics::OUTCOME_ERROR
@@ -315,7 +366,7 @@ fn the_memory_limit_denies_growth() {
     })
     .expect("engine");
     let m = compile(&e, &grow_guest(16));
-    let out = e.run(&m, b"", RunOptions::default()).expect("run");
+    let out = e.run_bytes(&m, b"", RunOptions::default()).expect("run");
     assert_eq!(out.len(), 0, "growth past the ceiling should be denied");
     let denied = guestfn_engine::metrics::sample(
         "guestfn_module_memory_denials_total",
@@ -346,7 +397,7 @@ fn the_pool_denies_growth_it_cannot_serve() {
 
     let eb = std::sync::Arc::clone(&e);
     let blocking = std::thread::spawn(move || {
-        eb.run(&blocker, b"", RunOptions::default())
+        eb.run_bytes(&blocker, b"", RunOptions::default())
             .expect("blocker run");
     });
     std::thread::sleep(Duration::from_millis(50));
@@ -357,7 +408,7 @@ fn the_pool_denies_growth_it_cannot_serve() {
         timeout: Some(Duration::from_millis(100)),
         ..Default::default()
     };
-    let out = e.run(&grower, b"", opts).expect("grower run");
+    let out = e.run_bytes(&grower, b"", opts).expect("grower run");
     assert_eq!(
         out.len(),
         0,
@@ -386,7 +437,7 @@ fn the_request_deadline_caps_the_run() {
         ..Default::default()
     };
     let started = std::time::Instant::now();
-    let err = e.run(&m, b"", opts).expect_err("should be cut short");
+    let err = e.run_bytes(&m, b"", opts).expect_err("should be cut short");
     assert!(
         err.to_string().contains("exceeded its execution deadline"),
         "unexpected error: {err}"
@@ -443,7 +494,7 @@ fn env_reaches_the_guest_sorted() {
         .into(),
         ..Default::default()
     };
-    let out = e.run(&m, b"", opts).expect("run");
+    let out = e.run_bytes(&m, b"", opts).expect("run");
     // A BTreeMap serves the environ sorted, so the guest sees a stable order.
     assert_eq!(String::from_utf8_lossy(&out), "A=1\0B=2\0");
 }
@@ -480,7 +531,7 @@ fn private_tmp_is_the_only_preopen() {
     );
     let m = compile(&e, &wat);
     let with_tmp = e
-        .run(
+        .run_bytes(
             &m,
             b"",
             RunOptions {
@@ -490,7 +541,7 @@ fn private_tmp_is_the_only_preopen() {
         )
         .expect("run");
     assert_eq!(String::from_utf8_lossy(&with_tmp), "/tmp");
-    let without = e.run(&m, b"", RunOptions::default()).expect("run");
+    let without = e.run_bytes(&m, b"", RunOptions::default()).expect("run");
     assert_eq!(without.len(), 0, "no pre-open without a private /tmp");
 }
 
@@ -625,9 +676,10 @@ fn log_levels_land() {
     );
     let m = compile(&e, &wat);
     let logged = GuestLogLines::default();
-    let out =
-        tracing::subscriber::with_default(logged.clone(), || e.run(&m, b"", RunOptions::default()))
-            .expect("run");
+    let out = tracing::subscriber::with_default(logged.clone(), || {
+        e.run_bytes(&m, b"", RunOptions::default())
+    })
+    .expect("run");
     assert_eq!(out, rsp);
     let want: Vec<_> = lines
         .iter()
@@ -647,7 +699,9 @@ fn serialize_round_trip() {
     let path = dir.path().join("c.bin");
     std::fs::write(&path, &artifact).expect("write");
     let loaded = e.deserialize_file(&path).expect("deserialize");
-    let out = e.run(&loaded, b"", RunOptions::default()).expect("run");
+    let out = e
+        .run_bytes(&loaded, b"", RunOptions::default())
+        .expect("run");
     assert_eq!(out, rsp);
 }
 
@@ -683,7 +737,7 @@ fn the_memory_limit_denies_table_growth() {
     })
     .expect("engine");
     let m = compile(&e, &guestfn_engine_wasm::testing::grow_table_guest(100_000));
-    let out = e.run(&m, b"", RunOptions::default()).expect("run");
+    let out = e.run_bytes(&m, b"", RunOptions::default()).expect("run");
     assert_eq!(
         out.len(),
         0,
@@ -716,7 +770,7 @@ fn the_pool_denies_table_growth_it_cannot_serve() {
 
     let eb = std::sync::Arc::clone(&e);
     let blocking = std::thread::spawn(move || {
-        eb.run(&blocker, b"", RunOptions::default())
+        eb.run_bytes(&blocker, b"", RunOptions::default())
             .expect("blocker run");
     });
     std::thread::sleep(Duration::from_millis(50));
@@ -724,7 +778,7 @@ fn the_pool_denies_table_growth_it_cannot_serve() {
         timeout: Some(Duration::from_millis(100)),
         ..Default::default()
     };
-    let out = e.run(&grower, b"", opts).expect("grower run");
+    let out = e.run_bytes(&grower, b"", opts).expect("grower run");
     assert_eq!(
         out.len(),
         0,
@@ -780,7 +834,7 @@ fn relaxed_simd_is_deterministic() {
       (i32.const 64)"#,
         ),
     );
-    let out = e.run(&m, b"", RunOptions::default()).expect("run");
+    let out = e.run_bytes(&m, b"", RunOptions::default()).expect("run");
     let mut want = Vec::new();
     for lane in [0i32, i32::MAX, i32::MIN, 1] {
         want.extend_from_slice(&lane.to_le_bytes());
@@ -843,7 +897,7 @@ fn the_ceiling_is_per_run_across_regions() {
     })
     .expect("engine");
     let m = compile(&e, &guestfn_engine_wasm::testing::grow_table_guest(40_000));
-    let out = e.run(&m, b"", RunOptions::default()).expect("run");
+    let out = e.run_bytes(&m, b"", RunOptions::default()).expect("run");
     assert_eq!(
         out.len(),
         0,
@@ -859,6 +913,8 @@ fn the_ceiling_is_per_run_across_regions() {
         &roomy,
         &guestfn_engine_wasm::testing::grow_table_guest(40_000),
     );
-    let out = roomy.run(&m, b"", RunOptions::default()).expect("run");
+    let out = roomy
+        .run_bytes(&m, b"", RunOptions::default())
+        .expect("run");
     assert_eq!(out.len(), 1, "the growth should succeed with room for both");
 }

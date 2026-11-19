@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
+use function_sdk_rust::proto::v1::{RunFunctionRequest, RunFunctionResponse};
+
 use crate::protocol::{Description, Exit};
 use crate::{ArtifactStore, Error};
 
@@ -66,6 +68,23 @@ impl SnapshotMemo {
     }
 }
 
+/// The request of one run, which a sandbox takes when it calls the
+/// function: the generated client sends a message it owns, and a run calls
+/// once. A spec that says nothing yet (prepare's) holds none.
+#[derive(Default)]
+pub struct OnceRequest(Mutex<Option<RunFunctionRequest>>);
+
+impl OnceRequest {
+    pub fn new(request: RunFunctionRequest) -> Self {
+        OnceRequest(Mutex::new(Some(request)))
+    }
+
+    /// The request, the first time; an empty one after that.
+    pub fn take(&self) -> RunFunctionRequest {
+        self.0.lock().expect("poisoned").take().unwrap_or_default()
+    }
+}
+
 /// One VM to boot and drive through the init's protocol.
 #[derive(Clone, Copy)]
 pub struct VmSpec<'a> {
@@ -76,7 +95,7 @@ pub struct VmSpec<'a> {
     pub memory_mib: u64,
     pub vcpus: u8,
     pub description: &'a Description,
-    pub request: &'a [u8],
+    pub request: &'a OnceRequest,
     /// When the run must be over: the sandbox stops the VM at it.
     pub deadline: Instant,
     /// Where the sandbox keeps the run's sockets and files, removed by
@@ -94,8 +113,9 @@ pub struct VmSpec<'a> {
 /// How a run ended.
 #[derive(Debug)]
 pub enum Ended {
-    /// The function answered the call: the response's bytes, as they came.
-    Answered(Vec<u8>),
+    /// The function answered the call: its response, boxed for the room
+    /// it takes beside the other ends.
+    Answered(Box<RunFunctionResponse>),
     /// The function answered the call with a gRPC status other than OK.
     Refused { code: String, message: String },
     /// The init reported the process's exit, before an answer.
@@ -105,6 +125,13 @@ pub enum Ended {
     /// The VM or the connection ended before the init reported, with what
     /// the sandbox saw.
     Lost(String),
+}
+
+impl Ended {
+    /// The end of a run whose function answered.
+    pub fn answered(response: RunFunctionResponse) -> Ended {
+        Ended::Answered(Box::new(response))
+    }
 }
 
 /// The most of a process's output the host keeps for one run. The output
@@ -219,10 +246,10 @@ pub struct Outcome {
 pub enum Run {
     /// Over: the VM is stopped, and this is all it left.
     Over(Outcome),
-    /// The function answered and its VM is still up: the response's bytes
-    /// as they came, which the caller gets at once, and the rest of the
-    /// run, which nobody waits for.
-    Answered(Vec<u8>, Rest),
+    /// The function answered and its VM is still up: the response, which
+    /// the caller gets at once, and the rest of the run, which nobody
+    /// waits for.
+    Answered(Box<RunFunctionResponse>, Rest),
 }
 
 /// What is left of a run once its response is in hand: the process is

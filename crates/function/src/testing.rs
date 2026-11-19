@@ -407,8 +407,9 @@ pub mod runtime {
     }
 
     /// Serves function over plain gRPC on a free loopback port, the way
-    /// `function serve --insecure` does, and returns the port. The server
-    /// runs on the current tokio runtime until the test ends.
+    /// `function serve --insecure` does once warm-up is done, and returns
+    /// the port. The server runs on the current tokio runtime until the
+    /// test ends.
     pub async fn serve(function: Arc<WasmFunction<Wasmtime>>) -> u16 {
         // Bound once and handed to the server: a port learned from a
         // listener that is then dropped could go to another process
@@ -425,9 +426,10 @@ pub mod runtime {
             max_recv_message_size: None,
             metrics_address: String::new(),
         };
-        let (_health, server) = crate::grpc::serve_on(function, &args, listener)
+        let (not_ready, server) = crate::grpc::serve_on(function, &args, listener)
             .await
             .expect("serve");
+        not_ready.ready().await;
         tokio::spawn(server);
         port
     }

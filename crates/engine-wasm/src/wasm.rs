@@ -16,9 +16,12 @@ pub use crate::component::ABI_V2_WORLD;
 // What every engine shares lives at the crate root; re-exported
 // here so this crate's users and tests read it from one place.
 use crate::{
-    Config, Engine, Error, Extern, Inspection, RunError, RunOptions, concurrency, metrics,
+    Config, Engine, Error, Extern, Inspection, RunError, RunFailure, RunOptions, concurrency,
+    metrics,
 };
 
+use function_sdk_rust::proto::v1::{RunFunctionRequest, RunFunctionResponse};
+use prost::Message as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::thread;
@@ -474,12 +477,13 @@ impl Wasmtime {
     }
 
     /// Instantiates the module and hands it the request bytes, within the
-    /// engine's ceilings narrowed by opts. The returned bytes are whatever the
-    /// guest produced; an error means the guest could not be run to completion
+    /// engine's ceilings narrowed by opts: the world's `run`, on the bytes
+    /// the guest sees. The returned bytes are whatever the guest produced;
+    /// an error means the guest could not be run to completion
     /// (instantiation failure, trap, exit, deadline, memory limit or the
     /// guest's own error string) and carries no response. Blocking: run it
     /// off the async executor.
-    pub(crate) fn run(
+    pub fn run_bytes(
         &self,
         m: &Module,
         request: &[u8],
@@ -523,8 +527,22 @@ impl Engine for Wasmtime {
         self.deserialize_file(path)
     }
 
-    fn run(&self, m: &Module, request: &[u8], opts: RunOptions) -> Result<Vec<u8>, RunError> {
-        self.run(m, request, opts)
+    /// The request encoded for the guest, and the guest's bytes decoded:
+    /// bytes that are no RunFunctionResponse are the module's failure.
+    fn run(
+        &self,
+        m: &Module,
+        request: RunFunctionRequest,
+        opts: RunOptions,
+    ) -> Result<RunFunctionResponse, RunError> {
+        let request = request.encode_to_vec();
+        let response = self.run_bytes(m, &request, opts)?;
+        RunFunctionResponse::decode(response.as_slice()).map_err(|e| {
+            RunError::new(
+                RunFailure::Undecodable,
+                format!("cannot decode response: {e}"),
+            )
+        })
     }
 
     fn version() -> String {

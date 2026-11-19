@@ -173,8 +173,8 @@ into `Capabilities`, `admit_compose` judges the output fence and
 `admit_require` the read fence, over the selectors
 `crates/function/src/require.rs` reads from the response. `crates/function/src/from.rs` applies the `from`
 fence. `crates/function/src/sandboxenv.rs` materializes the env bindings and
-checks the required credentials, and `crates/function/src/protowire.rs` drops
-the credentials that weren't granted. `function validate` calls the same
+checks the required credentials, and `crates/function/src/runner.rs` drops
+the credentials that weren't granted from the request it forwards. `function validate` calls the same
 functions.
 
 ## Alternatives

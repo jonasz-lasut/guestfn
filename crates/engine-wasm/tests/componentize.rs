@@ -92,7 +92,7 @@ fn assert_serves(e: &Wasmtime, wasm: &[u8], rsp: &[u8]) -> guestfn_engine::Inspe
         shape.exports
     );
     let m = e.compile(wasm).expect("compile");
-    let out = e.run(&m, b"", RunOptions::default()).expect("run");
+    let out = e.run_bytes(&m, b"", RunOptions::default()).expect("run");
     assert_eq!(out, rsp);
     shape
 }
@@ -279,7 +279,7 @@ fn the_embed_states_the_string_encoding() {
     let c = componentize(&utf16_embed).expect("componentize").wasm;
     let m = e.compile(&c).expect("compile");
     let err = e
-        .run(&m, b"", RunOptions::default())
+        .run_bytes(&m, b"", RunOptions::default())
         .expect_err("run returns an error");
     assert_eq!(err.to_string(), format!("run returned an error: {message}"));
 
@@ -293,7 +293,7 @@ fn the_embed_states_the_string_encoding() {
     let c = componentize(&utf8_embed).expect("componentize").wasm;
     let m = e.compile(&c).expect("compile");
     let err = e
-        .run(&m, b"", RunOptions::default())
+        .run_bytes(&m, b"", RunOptions::default())
         .expect_err("run fails");
     assert_ne!(err.to_string(), format!("run returned an error: {message}"));
 }

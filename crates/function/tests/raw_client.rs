@@ -1,16 +1,17 @@
-//! A raw-bytes gRPC client against the served runtime: the definitive
-//! transparency proof. A typed client would drop an unknown protobuf field
-//! before it ever left the process, so this client speaks the wire format
-//! directly - the request bytes carry fields this runtime's vendored proto
-//! does not know, between step credentials the module was not granted, an
-//! echo guest returns its request buffer, and the caller must get its exact
-//! bytes back through the whole gRPC stack, less exactly those credentials.
+//! A raw-bytes gRPC client against the served runtime: the proof that a
+//! field newer than the vendored proto crosses it. This client speaks the
+//! wire format directly, so the test states the unknown fields as bytes -
+//! on the request and inside its meta, between step credentials the module
+//! was not granted. An echo guest returns its request buffer, and the
+//! caller must get every field back through the whole gRPC stack, less
+//! exactly those credentials. The bytes themselves are not held to the
+//! caller's: the runtime decodes and encodes both messages on the way.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use function_sdk_rust::proto::v1::{
-    CredentialData, Credentials, RequestMeta, RunFunctionRequest, credentials,
+    CredentialData, Credentials, RequestMeta, RunFunctionRequest, RunFunctionResponse, credentials,
 };
 use function_sdk_rust::resource;
 use guestfn_runtime::testing::{guests, runtime};
@@ -70,7 +71,7 @@ impl tonic::codec::Decoder for RawDecoder {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn the_served_runtime_is_byte_transparent() {
+async fn the_served_runtime_keeps_unknown_fields() {
     let dir = tempfile::tempdir().expect("tempdir");
     std::fs::write(dir.path().join("fn.wasm"), guests::echo_component()).expect("write");
     let function = runtime::builder().module_dir(dir.path()).build();
@@ -94,9 +95,12 @@ async fn the_served_runtime_is_byte_transparent() {
     };
     // Fields this runtime's vendored proto does not know (999 and 1000),
     // between and after step credentials: the module has no manifest, so it
-    // was granted none of them.
+    // was granted none of them. And one inside the meta (field 15, in a
+    // second occurrence of field 1, which a decoder merges into the first).
     let unknown = [0xba, 0x3e, 0x03, b'x', b'y', b'z'];
     let unknown_too = [0xc2, 0x3e, 0x02, b'u', b'v'];
+    let unknown_in_meta = [0x7a, 0x02, b'h', b'i'];
+    let meta_again = [&[0x0a, unknown_in_meta.len() as u8][..], &unknown_in_meta].concat();
     let head = typed.encode_to_vec();
     let mut raw = head.clone();
     raw.extend(credential_entry("registry"));
@@ -104,9 +108,11 @@ async fn the_served_runtime_is_byte_transparent() {
     raw.extend(credential_entry("cmdb"));
     raw.extend(credential_entry("api"));
     raw.extend_from_slice(&unknown_too);
+    raw.extend_from_slice(&meta_again);
     let mut want = head;
     want.extend_from_slice(&unknown);
     want.extend_from_slice(&unknown_too);
+    want.extend_from_slice(&meta_again);
 
     let channel = connect(port).await;
     let mut client = tonic::client::Grpc::new(channel);
@@ -120,10 +126,20 @@ async fn the_served_runtime_is_byte_transparent() {
         .expect("RunFunction")
         .into_inner();
 
-    // The echo guest returned the forwarded request: the caller's exact
-    // bytes - the unknown fields included, in place - came back through the
-    // whole stack, with every credentials entry edited out and nothing else.
-    assert_eq!(rsp, want);
+    // The echo guest returned the forwarded request. Read as messages,
+    // what came back through the whole stack is what the caller sent
+    // without its credentials: every field, the unknown ones included,
+    // each in its own message.
+    assert_eq!(
+        RunFunctionResponse::decode(rsp.as_slice()).expect("a response"),
+        RunFunctionResponse::decode(want.as_slice()).expect("a response"),
+    );
+    for field in [&unknown[..], &unknown_too[..], &unknown_in_meta[..]] {
+        assert!(
+            rsp.windows(field.len()).any(|w| w == field),
+            "{field:?} came back"
+        );
+    }
     assert!(!rsp.windows(6).any(|w| w == b"secret"));
 
     // The served call showed up in the gRPC server series -
@@ -199,7 +215,9 @@ fn credential_entry(name: &str) -> Vec<u8> {
             Credentials {
                 source: Some(credentials::Source::CredentialData(CredentialData {
                     data: HashMap::from([("token".to_string(), format!("{name} secret").into())]),
+                    ..Default::default()
                 })),
+                ..Default::default()
             },
         )]),
         ..Default::default()

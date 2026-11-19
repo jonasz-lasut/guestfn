@@ -27,9 +27,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use function_sdk_rust::proto::v1::{
-    RequestMeta, Resource, RunFunctionRequest, RunFunctionResponse, State,
-};
+use function_sdk_rust::proto::v1::{RequestMeta, Resource, RunFunctionRequest, State};
 use guestfn_engine::{Config, Engine, RunOptions};
 use guestfn_engine_oci::rootfs::ZSTD_LEVEL;
 use guestfn_engine_oci::testing::{fixture_image, fixture_image_with, tar_layer};
@@ -116,7 +114,7 @@ const TAG: &str = "bench";
 
 /// A request as a composition step sends one: a composite resource and
 /// eight composed ones, observed and desired, a few kilobytes in all.
-fn request() -> Vec<u8> {
+fn request() -> RunFunctionRequest {
     let object = |kind: &str, name: &str| {
         let json = serde_json::json!({
             "apiVersion": "bench.example.org/v1alpha1",
@@ -164,6 +162,7 @@ fn request() -> Vec<u8> {
                 (name.clone(), object("Bucket", &name))
             })
             .collect(),
+        ..Default::default()
     };
     RunFunctionRequest {
         meta: Some(RequestMeta {
@@ -174,7 +173,6 @@ fn request() -> Vec<u8> {
         desired: Some(state()),
         ..Default::default()
     }
-    .encode_to_vec()
 }
 
 /// One measured run: when it started, the marks it passed, when the
@@ -222,10 +220,15 @@ fn ms(from: Instant, to: Instant) -> f64 {
 
 /// Runs the module once with its timeline kept; the answer must echo the
 /// request's tag.
-fn timed(e: &Oci, m: &Module, request: &[u8], opts: RunOptions) -> Result<Run, String> {
+fn timed(
+    e: &Oci,
+    m: &Module,
+    request: &RunFunctionRequest,
+    opts: RunOptions,
+) -> Result<Run, String> {
     timeline::start();
     let started = Instant::now();
-    let result = e.run(m, request, opts);
+    let result = e.run(m, request.clone(), opts);
     let resolved = Instant::now();
     // The VM is stopped on a thread of its own, which marks this timeline
     // too: the next run starts once it is gone, as the runs before it did.
@@ -233,11 +236,7 @@ fn timed(e: &Oci, m: &Module, request: &[u8], opts: RunOptions) -> Result<Run, S
     let gone = Instant::now();
     let marks = timeline::take();
     let response = result.map_err(|e| e.to_string())?;
-    let tag = RunFunctionResponse::decode(response.as_slice())
-        .map_err(|e| format!("cannot decode the response: {e}"))?
-        .meta
-        .map(|m| m.tag)
-        .unwrap_or_default();
+    let tag = response.meta.map(|m| m.tag).unwrap_or_default();
     if tag != TAG {
         return Err(format!("the response's tag is {tag:?}, not {TAG:?}"));
     }
@@ -277,7 +276,12 @@ impl Spread {
 /// `runs` measured runs after one that is not: the first run of a module
 /// makes its snapshot where the engine snapshots, and reads the root
 /// filesystem into the host's page cache either way.
-fn measure(e: &Oci, m: &Module, request: &[u8], runs: usize) -> Result<Vec<Run>, String> {
+fn measure(
+    e: &Oci,
+    m: &Module,
+    request: &RunFunctionRequest,
+    runs: usize,
+) -> Result<Vec<Run>, String> {
     e.warm(m).map_err(|e| e.0)?;
     measure_with(e, m, request, runs, opts)
 }
@@ -287,7 +291,7 @@ fn measure(e: &Oci, m: &Module, request: &[u8], runs: usize) -> Result<Vec<Run>,
 fn measure_with(
     e: &Oci,
     m: &Module,
-    request: &[u8],
+    request: &RunFunctionRequest,
     runs: usize,
     opts: impl Fn() -> RunOptions,
 ) -> Result<Vec<Run>, String> {
@@ -319,7 +323,7 @@ fn a_run_by_phase() {
         println!(
             "\n### A run by phase: {path}{}\n\n{runs} runs, a request of {} bytes, milliseconds.\n",
             label(),
-            request.len()
+            request.encoded_len()
         );
         println!(
             "| reached | since the mark before: p50 | p90 | max | since the start: p50 | looks: p50 | max |"

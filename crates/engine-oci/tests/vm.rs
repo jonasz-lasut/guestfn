@@ -15,9 +15,8 @@ use guestfn_engine::{ArtifactStore, Config, Engine, RunOptions};
 use guestfn_engine_oci::testing::fixture_image;
 use guestfn_engine_oci::{Oci, Options};
 
-use function_sdk_rust::proto::v1::{RequestMeta, RunFunctionRequest, RunFunctionResponse};
+use function_sdk_rust::proto::v1::{RequestMeta, RunFunctionRequest};
 use guestfn_engine_oci::Module;
-use prost::Message as _;
 
 struct Tools {
     firecracker: PathBuf,
@@ -109,14 +108,9 @@ fn ask(e: &Oci, m: &Module, tag: &str, o: RunOptions) -> Result<String, String> 
             ..Default::default()
         }),
         ..Default::default()
-    }
-    .encode_to_vec();
-    let response = e.run(m, &request, o).map_err(|e| e.to_string())?;
-    Ok(RunFunctionResponse::decode(response.as_slice())
-        .expect("a response")
-        .meta
-        .map(|m| m.tag)
-        .unwrap_or_default())
+    };
+    let response = e.run(m, request, o).map_err(|e| e.to_string())?;
+    Ok(response.meta.map(|m| m.tag).unwrap_or_default())
 }
 
 #[test]

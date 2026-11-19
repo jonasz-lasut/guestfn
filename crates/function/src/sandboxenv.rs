@@ -220,7 +220,9 @@ mod tests {
             Credentials {
                 source: Some(credentials::Source::CredentialData(CredentialData {
                     data: HashMap::from([(key.to_string(), value.to_vec())]),
+                    ..Default::default()
                 })),
+                ..Default::default()
             },
         )])
     }
