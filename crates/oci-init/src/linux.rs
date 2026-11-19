@@ -56,6 +56,7 @@ pub fn main() {
     if let Err(e) = run() {
         eprintln!("guestfn-init: {e}");
     }
+    console_sent();
     poweroff();
 }
 
@@ -120,6 +121,9 @@ fn run() -> Result<(), String> {
         "guestfn-init: exited status={:?} signal={:?} oom={}",
         exit.status, exit.signal, exit.oom
     );
+    // The host stops the VM as soon as it has the exit: the line above goes
+    // out first, whole (#392).
+    console_sent();
     let mut s = sock.lock().expect("poisoned");
     write_json(&mut *s, Kind::Exit, &exit).map_err(|e| format!("cannot report the exit: {e}"))?;
     let _ = s.shutdown(std::net::Shutdown::Write);
@@ -653,6 +657,19 @@ fn kmsg_mentions_oom() -> bool {
         }
     }
     plan::mentions_oom(&text)
+}
+
+/// Waits until the serial port has sent what the init printed. A write to
+/// the console returns once the bytes are queued in the guest, and the port
+/// sends them a FIFO at a time: a VM stopped in between loses the end of
+/// its last line. A byte the port has sent is the host's, whatever happens
+/// to the VM next.
+fn console_sent() {
+    // SAFETY: tcdrain takes a file descriptor and no pointers. A failure
+    // leaves the console as it was before the wait existed.
+    unsafe {
+        libc::tcdrain(libc::STDERR_FILENO);
+    }
 }
 
 fn poweroff() {
