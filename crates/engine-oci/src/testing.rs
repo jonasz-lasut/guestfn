@@ -5,7 +5,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use crate::Error;
-use crate::protocol::Description;
+use crate::protocol::{Description, Exit};
 
 use crate::layout::{OCI_MANIFEST_TYPE, Writer};
 use crate::sandbox::{Ended, Outcome, Remains, Rest, Run, Sandbox, VmSpec};
@@ -241,6 +241,7 @@ pub struct FakeSandbox {
     answer: Box<dyn Fn(&VmSpec<'_>) -> Outcome + Send + Sync>,
     prepared: Arc<Mutex<Vec<u64>>>,
     stopping: Option<Arc<dyn Fn() + Send + Sync>>,
+    late: Option<Exit>,
 }
 
 impl FakeSandbox {
@@ -253,7 +254,15 @@ impl FakeSandbox {
             answer: Box::new(answer),
             prepared: Arc::default(),
             stopping: None,
+            late: None,
         }
+    }
+
+    /// How the process of an answered run ends once it is told to stop,
+    /// as the init reports it: without it the init says nothing.
+    pub fn exiting(mut self, exit: Exit) -> FakeSandbox {
+        self.late = Some(exit);
+        self
     }
 
     /// Hands an answered run back with its VM still to stop, and runs
@@ -285,11 +294,16 @@ impl Sandbox for FakeSandbox {
         Ok(match (&self.stopping, end) {
             (Some(hook), Ended::Answered(response)) => {
                 let hook = Arc::clone(hook);
+                let late = self.late.clone();
                 Run::Answered(
                     response,
                     Rest::new(move || {
                         hook();
-                        Remains { log, console }
+                        Remains {
+                            log,
+                            console,
+                            exit: late,
+                        }
                     }),
                 )
             }

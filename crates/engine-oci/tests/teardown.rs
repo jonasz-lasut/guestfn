@@ -299,6 +299,68 @@ fn a_run_that_is_not_answered_is_over_when_it_returns() {
     assert!(!stopped.load(Ordering::SeqCst), "nothing was left to stop");
 }
 
+/// How the process ended after its answer is the log's alone, with the
+/// run's module and digest: a kill by the memory limit is a warning that
+/// names the limit, any other exit a debug record, and an init that said
+/// nothing leaves none. The caller has its response either way.
+#[test]
+fn an_exit_after_the_answer_is_logged() {
+    let _turn = serial();
+    let logs = Logs::capture();
+    let killed = Exit {
+        signal: Some(9),
+        ..Default::default()
+    };
+    let cases = [
+        ("stopped by the init", Some(killed.clone()), 1, 0),
+        (
+            "killed by the memory limit",
+            Some(Exit {
+                oom: true,
+                ..killed
+            }),
+            1,
+            1,
+        ),
+        ("an init that said nothing", None, 0, 0),
+    ];
+    for (name, exit, exits, warnings) in cases {
+        let fake = answering(|| ());
+        let e = engine(
+            Config::default(),
+            match exit {
+                Some(exit) => fake.exiting(exit),
+                None => fake,
+            },
+        );
+        let m = image(&e);
+        let module = format!("late exit, {name}");
+        assert_eq!(e.run(&m, b"r", opts(&module)).unwrap(), b"r", "{name}");
+        e.settle();
+        let mine = [
+            format!("module={module}"),
+            format!("digest=sha256:{module}"),
+        ];
+        let with = |more: &[&str]| {
+            let mut needles: Vec<&str> = mine.iter().map(String::as_str).collect();
+            needles.extend(more);
+            logs.with(&needles)
+        };
+        let logged = with(&[
+            "DEBUG",
+            "message=the process's exit after its answer",
+            "signal=Some(9)",
+        ]);
+        assert_eq!(logged.len(), exits, "{name}: {logged:?}");
+        let warned = with(&[
+            "WARN",
+            "message=process was killed after it answered: the run's memory limit of",
+            "was exceeded",
+        ]);
+        assert_eq!(warned.len(), warnings, "{name}: {warned:?}");
+    }
+}
+
 /// A sandbox that panics while it stops a VM takes nothing with it: the
 /// process goes on, the run gives back its slot and its memory and is
 /// observed, and the log says what was lost.

@@ -168,10 +168,10 @@ impl Firecracker {
             Driven::Answered(response, late) => Run::Answered(
                 response,
                 Rest::new(move || {
-                    let log = late.finish();
+                    let (exit, log) = late.finish();
                     vm.driven = Some(Instant::now());
                     let console = vm.stop();
-                    Remains { log, console }
+                    Remains { log, console, exit }
                 }),
             ),
         }
@@ -1125,11 +1125,11 @@ impl Late {
     }
 
     /// What an answered run still owes: the wait for the process to stop,
-    /// with what it wrote until then.
-    fn finish(mut self) -> Output {
-        let _ = self.exit_within_grace();
+    /// with how it ended, when the init said, and what it wrote until then.
+    fn finish(mut self) -> (Option<Exit>, Output) {
+        let exit = self.exit_within_grace().and_then(Result::ok);
         timeline::mark("exit-read");
-        self.close()
+        (exit, self.close())
     }
 }
 
