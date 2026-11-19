@@ -16,6 +16,7 @@ use semver::Version;
 use serde::Deserialize;
 
 use crate::inspect::client_for;
+use crate::release::newest;
 
 const PACKAGE: &str = "guestfn:function";
 const VENDORED_PACKAGE: &str = "wit/deps/guestfn-function.wit";
@@ -170,10 +171,10 @@ impl UpdateCmd {
         let tags = client_for(&reference)
             .tags(TAG_LIST_LIMIT)
             .map_err(|e| format!("cannot list the versions at {}: {e}", self.repository))?;
-        if let Some(next) = newest(&tags, |v| v.major > current.major) {
+        if let Some(next) = newest(&tags, "", |v| v.major > current.major) {
             println!("{PACKAGE} {next} is published: a new major, which --version {next} moves to");
         }
-        newest(&tags, |v| v.major == current.major).ok_or_else(|| {
+        newest(&tags, "", |v| v.major == current.major).ok_or_else(|| {
             format!(
                 "{} has no {}.x version of {PACKAGE}",
                 self.repository, current.major
@@ -469,13 +470,6 @@ fn declared_wasi(world: &str) -> Result<Vec<PackageRef>, String> {
 
 /// The newest stable version among the tags that `keep` admits: a tag that
 /// is no version (a referrers tag, a cosign signature) is passed over.
-fn newest(tags: &[String], keep: impl Fn(&Version) -> bool) -> Option<Version> {
-    tags.iter()
-        .filter_map(|tag| tag.parse::<Version>().ok())
-        .filter(|version| version.pre.is_empty() && keep(version))
-        .max()
-}
-
 fn move_includes(world: &str, to: &Version) -> String {
     world
         .split_inclusive('\n')
@@ -504,31 +498,6 @@ mod tests {
             included_version("package local:guest;\n"),
             Err(format!("{GUEST_WORLD} includes no version of {PACKAGE}"))
         );
-    }
-
-    #[test]
-    fn passes_over_prereleases_and_tags_that_are_no_version() {
-        let published: Vec<String> = [
-            "1.0.0",
-            "1.1.0",
-            "1.10.0",
-            "1.11.0-rc.1",
-            "sha256-abc",
-            "latest",
-            "2.0.0",
-        ]
-        .iter()
-        .map(|tag| tag.to_string())
-        .collect();
-        assert_eq!(
-            newest(&published, |v| v.major == 1),
-            Some(Version::new(1, 10, 0))
-        );
-        assert_eq!(
-            newest(&published, |v| v.major > 1),
-            Some(Version::new(2, 0, 0))
-        );
-        assert_eq!(newest(&published, |v| v.major == 3), None);
     }
 
     #[test]

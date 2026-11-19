@@ -7,6 +7,7 @@ mod composition;
 mod inspect;
 mod manifestcmd;
 mod push;
+mod release;
 mod scaffold;
 mod witcmd;
 
@@ -101,8 +102,19 @@ struct InitCmd {
     #[arg(long, default_value = FALLBACK_SDK_VERSION)]
     sdk_version: String,
 
-    /// Do not run go get / go mod tidy; go writes go.mod from the given
-    /// versions.
+    /// Function release example/functions.yaml references, e.g. v1.0.2.
+    /// Defaults to the newest release published to --repository of the
+    /// major this guestfn was built with.
+    #[arg(long, value_parser = release::parse_version)]
+    function_version: Option<semver::Version>,
+
+    /// Repository the function package is published to.
+    #[arg(long, default_value = release::fallback_repository())]
+    repository: String,
+
+    /// Look nothing up: example/functions.yaml references the function
+    /// release this guestfn was built with, and go get / go mod tidy do not
+    /// run (go writes go.mod from the given versions).
     #[arg(long)]
     offline: bool,
 }
@@ -128,6 +140,11 @@ impl InitCmd {
                 self.name.clone().unwrap_or_else(|| base.clone()),
             )
         };
+        let (function_package, function_note) = match (&self.function_version, self.offline) {
+            (Some(version), _) => (release::package(&self.repository, version), None),
+            (None, true) => release::compiled(&self.repository, "--offline").into(),
+            (None, false) => release::current(&self.repository)?.into(),
+        };
         let files = scaffold::render(scaffold::Options {
             lang: self.lang.clone(),
             module: module.clone(),
@@ -135,6 +152,7 @@ impl InitCmd {
             go_version: go_version(),
             sdk_version: self.sdk_version.clone(),
             requires: self.offline,
+            function_package,
         })?;
         scaffold::write(&self.dir, &files)?;
         let dir = self.dir.display();
@@ -146,6 +164,11 @@ impl InitCmd {
         };
         let what = if is_go { &module } else { &name };
         println!("Created {dir} ({kind} {what})");
+        match function_note {
+            Some(release::Note::Found(line)) => println!("{line}"),
+            Some(release::Note::Fallback(line)) => eprintln!("{line}"),
+            None => {}
+        }
 
         // Only the Go-toolchain flavours carry a go.mod to resolve; the
         // others vendor or fetch their dependencies through their own build

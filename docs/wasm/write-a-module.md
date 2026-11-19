@@ -18,6 +18,14 @@ guestfn init greeter --module github.com/example/greeter   # --lang go (default)
 cd greeter
 ```
 
+`guestfn init` reads the tags of `ghcr.io/jonasz-lasut/function-wasm` and
+writes the newest release of the CLI's own major into
+`example/functions.yaml`. `--function-version` states the release, and
+`--repository` names another repository to read, with the credential the
+Docker keychain has for its registry. With `--offline`, or when the
+registry doesn't answer within 3 seconds, the CLI writes the release built
+into it and says so.
+
 The Go scaffold writes `fn.go`, `fn_test.go` and `main.go`. `fn.go` is a
 plain function-sdk-go `RunFunction` that composes a ConfigMap greeting the
 composite resource, with no code specific to WebAssembly. `main.go` only
