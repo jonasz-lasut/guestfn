@@ -16,6 +16,9 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use function_sdk_rust::proto::v1::RunFunctionResponse;
+use function_sdk_rust::proto::v1::function_runner_service_client::FunctionRunnerServiceClient;
+
 use crate::Error;
 use crate::protocol::{Exit, Hello, Kind, read_frame, read_json, write_frame, write_json};
 
@@ -884,7 +887,7 @@ enum Driven {
     /// Over: what the process wrote, and how the run ended.
     Over(Output, Ended),
     /// The function answered: the response, and what the run still owes.
-    Answered(Vec<u8>, Late),
+    Answered(Box<RunFunctionResponse>, Late),
 }
 
 /// Waits for the init's connection, then speaks the protocol until the
@@ -986,7 +989,7 @@ fn read_frames(
 
 /// How the call over the guest's bridge ended.
 enum Call {
-    Answered(Vec<u8>),
+    Answered(Box<RunFunctionResponse>),
     Refused {
         code: String,
         message: String,
@@ -1003,9 +1006,9 @@ fn ended_of(result: Result<Result<Exit, Talk>, tokio::sync::oneshot::error::Recv
 }
 
 /// Waits for the init's bridge to the function's server, then calls
-/// `RunFunction` over it with the request's bytes, as they came. The
-/// function is untrusted: the run's deadline and MAX_RESPONSE bound what it
-/// can make the host do.
+/// `RunFunction` over it with the run's request, through the SDK's
+/// generated client. The function is untrusted: the run's deadline and
+/// MAX_RESPONSE bound what it can make the host do.
 async fn call(
     grpc: UnixListener,
     spec: &VmSpec<'_>,
@@ -1034,36 +1037,28 @@ async fn call(
                 .ok_or_else(|| std::io::Error::other("the guest's one connection is gone"))
         }
     });
-    let request = spec.request.to_vec();
+    let request = spec.request.take();
     let left = spec.deadline.saturating_duration_since(Instant::now());
     let rpc = async move {
         let channel = tonic::transport::Endpoint::from_static("http://guest")
             .connect_with_connector(connector)
             .await
             .map_err(|e| tonic::Status::from_error(Box::new(e)))?;
-        let mut client = tonic::client::Grpc::new(channel)
+        // The channel is connected by now: the client waits for nothing
+        // more before it sends.
+        let mut client = FunctionRunnerServiceClient::new(channel)
             .max_decoding_message_size(MAX_RESPONSE)
             .max_encoding_message_size(usize::MAX);
-        client
-            .ready()
-            .await
-            .map_err(|e| tonic::Status::from_error(Box::new(e)))?;
         timeline::mark("call-ready");
         let mut request = tonic::Request::new(request);
         request.set_timeout(left);
-        client
-            .unary(
-                request,
-                http::uri::PathAndQuery::from_static(crate::grpc::RUN_FUNCTION),
-                crate::grpc::RawCodec,
-            )
-            .await
+        client.run_function(request).await
     };
     tokio::select! {
         answer = rpc => match answer {
             Ok(response) => {
                 timeline::mark("response-received");
-                Call::Answered(response.into_inner().to_vec())
+                Call::Answered(Box::new(response.into_inner()))
             }
             // The client enforces the timeout it sends, and the select below
             // may poll its error first: past the deadline, any failure is
@@ -1243,7 +1238,7 @@ mod tests {
             memory_mib: 64,
             vcpus: 1,
             description: &description,
-            request: b"",
+            request: &crate::sandbox::OnceRequest::default(),
             deadline: Instant::now(),
             scratch: dir.path(),
             snapshots: &memo,
@@ -1326,7 +1321,7 @@ mod tests {
                 memory_mib: 64,
                 vcpus: 1,
                 description: &description,
-                request: b"",
+                request: &crate::sandbox::OnceRequest::default(),
                 deadline: Instant::now() + Duration::from_millis(50),
                 scratch: &scratch,
                 snapshots: &memo,
@@ -1498,7 +1493,7 @@ mod tests {
             memory_mib: 64,
             vcpus: 1,
             description: &description,
-            request: b"",
+            request: &crate::sandbox::OnceRequest::default(),
             deadline: Instant::now() + Duration::from_millis(50),
             scratch: dir.path(),
             snapshots: &Default::default(),

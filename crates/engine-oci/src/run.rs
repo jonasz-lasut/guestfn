@@ -19,8 +19,10 @@ use std::time::{Duration, Instant};
 use crate::concurrency::{MemPool, OwnedSlot, format_bytes};
 use crate::{Error, RunError, RunFailure, RunOptions, metrics};
 
+use function_sdk_rust::proto::v1::{RunFunctionRequest, RunFunctionResponse};
+
 use crate::protocol::Exit;
-use crate::sandbox::{Ended, OUTPUT_CAP, Outcome, Output, Rest, Run, VmSpec};
+use crate::sandbox::{Ended, OUTPUT_CAP, OnceRequest, Outcome, Output, Rest, Run, VmSpec};
 use crate::{Image, Module, Oci, Rootfs, timeline};
 
 /// What the VM gets beyond the process's limit: the guest kernel, the
@@ -204,9 +206,9 @@ impl Teardown {
 pub(crate) fn run(
     engine: &Oci,
     image: &Module,
-    request: &[u8],
+    request: RunFunctionRequest,
     opts: RunOptions,
-) -> Result<Vec<u8>, RunError> {
+) -> Result<RunFunctionResponse, RunError> {
     let limits = engine.config.narrowed_by(&opts);
     let wait_deadline = opts.deadline_within(limits.timeout);
     let slot = match &engine.scheduler {
@@ -243,6 +245,7 @@ pub(crate) fn run(
     let deadline = opts.deadline_within(budget);
     let mut description = image.config.describe(&opts);
     description.memory_max = process_mib << 20;
+    let request = OnceRequest::new(request);
     let run = engine.sandbox.run(VmSpec {
         kernel: &engine.options.kernel,
         initrd: engine.initrd.as_ref(),
@@ -250,7 +253,7 @@ pub(crate) fn run(
         memory_mib,
         vcpus: engine.options.vcpus,
         description: &description,
-        request,
+        request: &request,
         deadline,
         scratch: engine.scratch.path(),
         snapshots: &image.snapshots,
@@ -260,7 +263,7 @@ pub(crate) fn run(
         Ok(run) => run,
         // The sandbox's own failure: observed by its kind, like any other.
         Err(e) => {
-            let failed: Result<Vec<u8>, RunError> = Err(e.into());
+            let failed: Result<RunFunctionResponse, RunError> = Err(e.into());
             bounds.observe(metrics::run_outcome(&failed));
             return failed;
         }
@@ -273,7 +276,7 @@ pub(crate) fn run(
             result
         }
         Run::Answered(response, rest) => {
-            let answered: Result<Vec<u8>, RunError> = Ok(response);
+            let answered: Result<RunFunctionResponse, RunError> = Ok(*response);
             bounds.observe(metrics::run_outcome(&answered));
             engine.teardowns.spawn(Teardown {
                 rest,
@@ -330,7 +333,7 @@ pub(crate) fn prepare(engine: &Oci, image: &Image) -> Result<(), Error> {
         memory_mib,
         vcpus: engine.options.vcpus,
         description: &description,
-        request: &[],
+        request: &OnceRequest::default(),
         deadline,
         scratch: engine.scratch.path(),
         snapshots: &image.snapshots,
@@ -390,7 +393,7 @@ fn conclude(
     opts: &RunOptions,
     budget: Duration,
     process_mib: u64,
-) -> Result<Vec<u8>, RunError> {
+) -> Result<RunFunctionResponse, RunError> {
     let output = report(outcome.log, &outcome.console, opts);
     let last_line = last_line(&output);
     match outcome.end {
@@ -399,7 +402,7 @@ fn conclude(
             RunFailure::Host,
             format!("run failed: {why}"),
         )),
-        Ended::Answered(response) => Ok(response),
+        Ended::Answered(response) => Ok(*response),
         Ended::Refused { code, message } => Err(RunError::new(
             RunFailure::Returned,
             format!("run returned an error: {message} (gRPC status {code})"),

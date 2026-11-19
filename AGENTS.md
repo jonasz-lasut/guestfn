@@ -73,9 +73,11 @@ the request, function-sdk-rust's `RunFunctionRequest`.
    store, WASI argv `["function"]`, no network, `/tmp` and env only as granted,
    the epoch deadline capped by the gRPC deadline, `wasi:http` through the
    egress client. The configuration read at step 2 is written into the
-   forwarded Input. The engine takes the request encoded, and its answer is
-   decoded: a response that doesn't decode is a fatal result (`cannot decode
-   response`).
+   forwarded Input. The engine takes the request and hands back the
+   response: it encodes one for its module and decodes the other, and a
+   response that doesn't decode is a fatal result (`cannot decode response`).
+   The runner keeps a copy of the desired state and the context for what
+   follows the run.
    - 8a. **Read fence** (`require.rs`, `admission::admit_require`), where a
      layer scopes `requireResource`: every resource selector of the response's
      requirements. A response carrying a fatal result is judged too.
@@ -119,8 +121,7 @@ crates/function-wasm/     function-wasm's main; tests/conformance.rs, tests/logg
 crates/function-oci/      function-oci's main, with the OCI engine's flags
 crates/engine/            the Engine trait, ArtifactStore, Config, RunOptions, RunError (the run
                           metric reads its RunFailure kind, never the words), HttpRequester,
-                          slots and memory pool, metrics.rs, RawCodec (the OCI engine's
-                          client). No WebAssembly
+                          slots and memory pool, metrics.rs. No WebAssembly
 crates/engine-wasm/       the Wasmtime engine: wasm.rs (compile, ABI check, inspect), run.rs,
                           component.rs (world host, typecheck), wasihttp.rs, componentize.rs
                           (guestfn build's wrap, embed_world), testing.rs (WAT fixtures)
@@ -599,6 +600,11 @@ One line each; the record named holds the reasoning.
   2026-08-25, because a prost round-trip silently dropped the fields of a guest
   built on a newer proto than the runtime. A module sees only the step
   credentials it was granted (2026-10).
+- An engine takes the request as the SDK's message and returns the response
+  as one (Jonasz, 2026-11-19): the OCI engine calls its VM through the SDK's
+  generated client, with no codec of the runtime's own. The runner pays for
+  it with a copy of the desired state and the context, kept for a fatal
+  result and the output fence.
 - The gRPC server is assembled in `grpc.rs`, not by the SDK's `Server`
   (Jonasz, 2026-08-26): it has one caller, and owning it lets warm-up flip
   gRPC health. It holds `RunFunction` back until then as the SDK's does

@@ -101,7 +101,7 @@ fn throughput(pooling: bool, wasm: &[u8], threads: usize) -> (f64, Option<String
     let module = engine.compile(wasm).expect("compile");
     let request = Arc::new(request());
     let failure = engine
-        .run(&module, &request, RunOptions::default())
+        .run_bytes(&module, &request, RunOptions::default())
         .err()
         .map(|e| e.to_string());
     let counting = Arc::new(AtomicBool::new(false));
@@ -115,7 +115,7 @@ fn throughput(pooling: bool, wasm: &[u8], threads: usize) -> (f64, Option<String
                 (Arc::clone(&counting), Arc::clone(&stop), Arc::clone(&runs));
             std::thread::spawn(move || {
                 while !stop.load(Ordering::Relaxed) {
-                    let _ = engine.run(&module, &request, RunOptions::default());
+                    let _ = engine.run_bytes(&module, &request, RunOptions::default());
                     if counting.load(Ordering::Relaxed) {
                         runs.fetch_add(1, Ordering::Relaxed);
                     }

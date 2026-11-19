@@ -1762,7 +1762,7 @@ dependencies = [
 name = "guestfn-engine"
 version = "0.1.0"
 dependencies = [
- "bytes",
+ "function-sdk-rust",
  "hex",
  "prometheus-client",
  "serde",
@@ -1770,7 +1770,6 @@ dependencies = [
  "sha2 0.11.1",
  "tar",
  "thiserror",
- "tonic",
 ]
 
 [[package]]

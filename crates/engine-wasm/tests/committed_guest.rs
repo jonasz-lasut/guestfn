@@ -99,7 +99,7 @@ fn without_a_grant_the_refusal_reaches_the_guest_in_band() {
     let e = engine();
     let m = guest(&e);
     let out = e
-        .run(
+        .run_bytes(
             &m,
             &request("https://api.example.com/v1/x"),
             RunOptions::default(),
@@ -129,7 +129,7 @@ fn a_refusal_from_the_requester_reaches_the_guest_in_band() {
         ..Default::default()
     };
     let out = e
-        .run(&m, &request("https://api.example.com/v1/x"), opts)
+        .run_bytes(&m, &request("https://api.example.com/v1/x"), opts)
         .expect("the run completes");
     let egress = egress_status(&out);
     let error = egress["error"].as_str().expect("an in-band error");
@@ -152,7 +152,7 @@ fn a_granted_send_returns_the_answer() {
         ..Default::default()
     };
     let out = e
-        .run(&m, &request("https://api.example.com/v1/x"), opts)
+        .run_bytes(&m, &request("https://api.example.com/v1/x"), opts)
         .expect("the run completes");
     let egress = egress_status(&out);
     assert_eq!(egress["status"].as_f64(), Some(200.0), "{egress}");
@@ -177,7 +177,7 @@ fn an_http_wait_does_not_consume_the_deadline() {
         ..Default::default()
     };
     let out = e
-        .run(&m, &request("https://api.example.com/v1/slow"), opts)
+        .run_bytes(&m, &request("https://api.example.com/v1/slow"), opts)
         .expect("the wait is credited back, the run completes");
     assert_eq!(egress_status(&out)["status"].as_f64(), Some(200.0));
 }

@@ -6,7 +6,8 @@
 //! in both the observed and the desired state (5 to 10 is what a
 //! composition usually holds; 100 and 1000 are stress sizes). Beside each
 //! wire-to-wire figure it times the stages on their own - the request's
-//! decode and the encode of what the module is forwarded, admission, the
+//! decode and the encode of what the module is forwarded, the copy the
+//! runtime keeps of the desired state and the context, admission, the
 //! capability decision, the run, the response's decode and encode, the
 //! fences - so a change to one of them can be read against what it costs.
 //! Not part of the suite:
@@ -347,6 +348,10 @@ fn stages(
         std::hint::black_box(req.encode_to_vec());
     })
     .print("request encode (what the module is forwarded)");
+    Samples::of(iters, || {
+        std::hint::black_box((req.desired.clone(), req.context.clone()));
+    })
+    .print("desired + context copy (kept past the run)");
     let config = Config::default();
     Samples::of(iters, || {
         let input: Input = function_sdk_rust::request::get_input(&req).expect("an Input");
@@ -389,11 +394,11 @@ fn stages(
     Samples::of(iters, || {
         std::hint::black_box(
             engine
-                .run(&module, raw, RunOptions::default())
+                .run_bytes(&module, raw, RunOptions::default())
                 .expect("runs"),
         );
     })
-    .print("engine.run");
+    .print("engine.run_bytes (the guest's run)");
 
     Samples::of(iters, || {
         std::hint::black_box(RunFunctionResponse::decode(response).expect("a response"));

@@ -23,9 +23,10 @@ pub mod timeline;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use function_sdk_rust::proto::v1::{RunFunctionRequest, RunFunctionResponse};
 pub(crate) use guestfn_engine::{
     ArtifactStore, Config, DEFAULT_MODULE_SIZE_LIMIT, Engine, Error, Inspection, RunError,
-    RunFailure, RunOptions, concurrency, grpc, metrics,
+    RunFailure, RunOptions, concurrency, metrics,
 };
 pub(crate) use guestfn_oci_protocol as protocol;
 pub use image::ImageConfig;
@@ -342,7 +343,12 @@ impl Engine for Oci {
         })
     }
 
-    fn run(&self, m: &Module, request: &[u8], opts: RunOptions) -> Result<Vec<u8>, RunError> {
+    fn run(
+        &self,
+        m: &Module,
+        request: RunFunctionRequest,
+        opts: RunOptions,
+    ) -> Result<RunFunctionResponse, RunError> {
         run::run(self, m, request, opts)
     }
 
@@ -380,7 +386,9 @@ mod tests {
     use super::*;
     use crate::protocol::Exit;
     use crate::sandbox::{Ended, OUTPUT_CAP, Outcome, Output, VmSpec};
-    use crate::testing::{FakeSandbox, Layer, fixture_image, fixture_image_with};
+    use crate::testing::{
+        FakeSandbox, Layer, answer, echo, fixture_image, fixture_image_with, request,
+    };
 
     fn engine(sandbox: FakeSandbox) -> Oci {
         engine_with(Config::default(), sandbox)
@@ -445,7 +453,7 @@ mod tests {
         let e = engine(FakeSandbox::new(Default::default(), |spec: &VmSpec<'_>| {
             Outcome {
                 log: Output::default(),
-                end: Ended::Answered(spec.request.to_vec()),
+                end: Ended::answered(echo(spec)),
                 console: String::new(),
             }
         }));
@@ -499,7 +507,7 @@ mod tests {
             spec.snapshots.turn_off();
             Outcome {
                 log: Output::default(),
-                end: Ended::Answered(spec.request.to_vec()),
+                end: Ended::answered(echo(spec)),
                 console: String::new(),
             }
         });
@@ -509,7 +517,8 @@ mod tests {
         let image = fixture_image(b"#!/bin/sh\n", &["/app/run"], "app", &[]);
         let compiled = e.compile(&image).unwrap();
         let scratch = compiled.rootfs.path().to_path_buf();
-        e.run(&compiled, b"one", RunOptions::default()).unwrap();
+        e.run(&compiled, request("one"), RunOptions::default())
+            .unwrap();
         assert!(compiled.snapshots.is_off());
 
         let dir = tempfile::tempdir().unwrap();
@@ -522,7 +531,8 @@ mod tests {
             "the scratch file goes with the compiled image"
         );
         assert!(!stored.snapshots.is_off(), "a memo of its own");
-        e.run(&stored, b"two", RunOptions::default()).unwrap();
+        e.run(&stored, request("two"), RunOptions::default())
+            .unwrap();
 
         assert_eq!(
             *stores.lock().unwrap(),
@@ -556,7 +566,7 @@ mod tests {
             log: Output::from(
                 b"a line\n{\"level\":\"warn\",\"msg\":\"typed\",\"k\":1}\n".as_slice(),
             ),
-            end: Ended::Answered(spec.request.to_vec()),
+            end: Ended::answered(echo(spec)),
             console: String::new(),
         });
         let e = engine(fake);
@@ -587,8 +597,8 @@ mod tests {
         let mut opts = RunOptions::default();
         opts.env.insert("B".to_string(), "bound".to_string());
         opts.module = "oci example".to_string();
-        let out = e.run(&loaded, b"request bytes", opts).unwrap();
-        assert_eq!(out, b"request bytes");
+        let out = e.run(&loaded, request("request bytes"), opts).unwrap();
+        assert_eq!(out, answer("request bytes"));
         let seen = seen.lock().unwrap();
         assert_eq!(seen.len(), 1);
         assert_eq!(seen[0].argv, vec!["/app/run", "--flag"]);
@@ -759,7 +769,7 @@ mod tests {
             let m = e
                 .compile(&fixture_image(b"x", &["/x"], "app", &[]))
                 .unwrap();
-            let err = e.run(&m, b"r", RunOptions::default()).unwrap_err();
+            let err = e.run(&m, request("r"), RunOptions::default()).unwrap_err();
             assert_eq!((err.kind(), err.message()), (kind, want));
         }
     }
@@ -780,12 +790,13 @@ mod tests {
             assert!(log.len() <= OUTPUT_CAP);
             log
         }
-        type Want<'a> = Result<&'a [u8], &'a str>;
+        // An answer by its tag, a failure by its message.
+        type Want<'a> = Result<&'a str, &'a str>;
         let cases: Vec<(&str, Ended, Want<'_>)> = vec![
             (
                 "an answer",
-                Ended::Answered(b"the response".to_vec()),
-                Ok(b"the response"),
+                Ended::answered(answer("the response")),
+                Ok("the response"),
             ),
             (
                 "an exit",
@@ -819,9 +830,9 @@ mod tests {
                 .compile(&fixture_image(b"x", &["/x"], "app", &[]))
                 .unwrap();
             let got = e
-                .run(&m, b"r", RunOptions::default())
+                .run(&m, request("r"), RunOptions::default())
                 .map_err(|e| e.to_string());
-            let want = want.map(<[u8]>::to_vec).map_err(str::to_string);
+            let want = want.map(answer).map_err(str::to_string);
             assert_eq!(got, want, "{name}");
         }
     }

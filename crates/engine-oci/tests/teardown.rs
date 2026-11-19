@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use guestfn_engine::{ArtifactStore, Config, Engine, RunFailure, RunOptions, metrics};
 use guestfn_engine_oci::sandbox::{Ended, OUTPUT_CAP, Outcome, Output, VmSpec};
-use guestfn_engine_oci::testing::{FakeSandbox, Logs, fixture_image};
+use guestfn_engine_oci::testing::{FakeSandbox, Logs, answer, echo, fixture_image, request};
 use guestfn_engine_oci::{Module, Oci, Options};
 use guestfn_oci_protocol::Exit;
 
@@ -70,7 +70,7 @@ fn image(e: &Oci) -> Module {
 fn answering(stopping: impl Fn() + Send + Sync + 'static) -> FakeSandbox {
     FakeSandbox::new(Default::default(), |spec: &VmSpec<'_>| Outcome {
         log: Output::default(),
-        end: Ended::Answered(spec.request.to_vec()),
+        end: Ended::answered(echo(spec)),
         console: String::new(),
     })
     .stopping(stopping)
@@ -129,11 +129,11 @@ fn an_answered_run_keeps_its_slot_until_its_vm_is_stopped() {
     let (flying, observed) = (in_flight(), runs("ok"));
 
     // Returned here, with the fake VM held up: the caller did not wait.
-    let out = e.run(&m, b"one", opts("slot")).unwrap();
-    assert_eq!(out, b"one");
+    let out = e.run(&m, request("one"), opts("slot")).unwrap();
+    assert_eq!(out, answer("one"));
     assert_eq!(in_flight(), flying + 1.0, "the run is still in flight");
     assert_eq!(runs("ok"), observed + 1.0, "and observed at its response");
-    let err = e.run(&m, b"two", impatient("slot")).unwrap_err();
+    let err = e.run(&m, request("two"), impatient("slot")).unwrap_err();
     assert_eq!(
         (err.kind(), err.message()),
         (
@@ -146,7 +146,10 @@ fn an_answered_run_keeps_its_slot_until_its_vm_is_stopped() {
     e.settle();
     assert_eq!(in_flight(), flying);
     assert_eq!(runs("ok"), observed + 1.0, "observed once");
-    assert_eq!(e.run(&m, b"three", impatient("slot")).unwrap(), b"three");
+    assert_eq!(
+        e.run(&m, request("three"), impatient("slot")).unwrap(),
+        answer("three")
+    );
 }
 
 /// The same for the VM's memory: reserved until the VMM is gone, so no
@@ -164,8 +167,11 @@ fn an_answered_run_keeps_its_memory_until_its_vm_is_stopped() {
         answering(move || held.wait()),
     );
     let m = image(&e);
-    assert_eq!(e.run(&m, b"one", opts("memory")).unwrap(), b"one");
-    let err = e.run(&m, b"two", impatient("memory")).unwrap_err();
+    assert_eq!(
+        e.run(&m, request("one"), opts("memory")).unwrap(),
+        answer("one")
+    );
+    let err = e.run(&m, request("two"), impatient("memory")).unwrap_err();
     assert_eq!(err.kind(), RunFailure::Waiting);
     let err = err.message();
     assert!(
@@ -174,7 +180,10 @@ fn an_answered_run_keeps_its_memory_until_its_vm_is_stopped() {
     );
     gate.open();
     e.settle();
-    assert_eq!(e.run(&m, b"three", impatient("memory")).unwrap(), b"three");
+    assert_eq!(
+        e.run(&m, request("three"), impatient("memory")).unwrap(),
+        answer("three")
+    );
 }
 
 /// What the process wrote and the VM's console are logged once the VM is
@@ -199,7 +208,7 @@ fn what_an_answered_run_left_is_logged_once_its_vm_is_stopped() {
         log.push(b"a last plain line\n{\"level\":\"warn\",\"msg\":\"a typed line\",\"k\":1}\n");
         Outcome {
             log,
-            end: Ended::Answered(spec.request.to_vec()),
+            end: Ended::answered(echo(spec)),
             console: "guestfn-init: exited status=None signal=Some(9) oom=true\n".to_string(),
         }
     })
@@ -209,7 +218,10 @@ fn what_an_answered_run_left_is_logged_once_its_vm_is_stopped() {
     let mine = ["module=late lines", "digest=sha256:late lines"];
     let with = |more: &[&str]| logs.with(&[&mine[..], more].concat());
 
-    assert_eq!(e.run(&m, b"r", opts("late lines")).unwrap(), b"r");
+    assert_eq!(
+        e.run(&m, request("r"), opts("late lines")).unwrap(),
+        answer("r")
+    );
     assert_eq!(
         with(&[]),
         [] as [&str; 0],
@@ -289,7 +301,7 @@ fn a_run_that_is_not_answered_is_over_when_it_returns() {
         let m = image(&e);
         let (flying, observed) = (in_flight(), runs(outcome));
         let module = format!("unanswered {name}");
-        let err = e.run(&m, b"r", opts(&module)).unwrap_err();
+        let err = e.run(&m, request("r"), opts(&module)).unwrap_err();
         assert_eq!((err.kind(), err.message()), (kind, want), "{name}");
         let logged = logs.with(&[&format!("module={module}"), "message=out of ideas"]);
         assert_eq!(logged.len(), 1, "{name}: {logged:?}");
@@ -335,7 +347,11 @@ fn an_exit_after_the_answer_is_logged() {
         );
         let m = image(&e);
         let module = format!("late exit, {name}");
-        assert_eq!(e.run(&m, b"r", opts(&module)).unwrap(), b"r", "{name}");
+        assert_eq!(
+            e.run(&m, request("r"), opts(&module)).unwrap(),
+            answer("r"),
+            "{name}"
+        );
         e.settle();
         let mine = [
             format!("module={module}"),
@@ -378,9 +394,9 @@ fn a_teardown_that_panics_gives_back_what_the_run_held() {
     );
     let m = image(&e);
     let (flying, observed) = (in_flight(), runs("ok"));
-    for request in [b"one", b"two"] {
-        let out = e.run(&m, request, impatient("panicking")).unwrap();
-        assert_eq!(out, request);
+    for tag in ["one", "two"] {
+        let out = e.run(&m, request(tag), impatient("panicking")).unwrap();
+        assert_eq!(out, answer(tag));
         e.settle();
     }
     assert_eq!(in_flight(), flying);
@@ -410,7 +426,10 @@ fn a_dropped_engine_waits_for_its_vms() {
         }),
     );
     let m = image(&e);
-    assert_eq!(e.run(&m, b"r", opts("shutdown")).unwrap(), b"r");
+    assert_eq!(
+        e.run(&m, request("r"), opts("shutdown")).unwrap(),
+        answer("r")
+    );
     assert!(!stopped.load(Ordering::SeqCst), "the VM is still up");
     drop(e);
     assert!(stopped.load(Ordering::SeqCst), "the VM was stopped first");
@@ -457,7 +476,10 @@ fn a_stored_image_is_held_until_its_vm_is_stopped() {
     let compiled = image(&e);
     std::fs::write(&entry, e.serialize(&compiled).unwrap()).unwrap();
     let stored = e.stored(compiled, &entry);
-    assert_eq!(e.run(&stored, b"r", opts("held")).unwrap(), b"r");
+    assert_eq!(
+        e.run(&stored, request("r"), opts("held")).unwrap(),
+        answer("r")
+    );
     // The cache lets go of the image while its VM is being stopped.
     drop(stored);
     assert_eq!(*store.held.lock().unwrap(), vec![entry.clone()]);

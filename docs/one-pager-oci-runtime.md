@@ -121,8 +121,8 @@ runtime calls `RunFunction` once that port accepts a connection:
 
 | part | content |
 |---|---|
-| the request | the `RunFunctionRequest` the proxy forwards, encoded, as the component's `run` receives it. The engine sends those bytes through a pass-through codec |
-| the response | the `RunFunctionResponse` bytes, which the proxy decodes. It adds `meta` when the guest omitted it, as today |
+| the request | the `RunFunctionRequest` the proxy forwards, as the component's `run` receives it. The engine takes the message and sends it with function-sdk-rust's generated client |
+| the response | the `RunFunctionResponse` the client decodes. The proxy adds `meta` when the guest omitted it, as today. Bytes that don't decode read as a status other than OK, `Internal`, in prost's words |
 | a status other than OK | `module <desc> failed: run returned an error: <message> (gRPC status <code>)`, a fatal result on a fresh response, as a component's `err(string)` is |
 | standard output and standard error | log lines. A line that parses as a JSON object with `level` and `msg` becomes a typed log line with its other keys as fields. Every other line logs at info. `module` and `digest` attach as they do for the typed `log` import |
 | the process ending before it answers | `module <desc> failed: process exited with status <n> before answering the call: <the last log line>` |

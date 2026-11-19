@@ -27,7 +27,9 @@ tar = "0.4"
 tempfile = "3"
 tracing.workspace = true
 
-# The call to the function's gRPC server over vsock.
+# The call to the function's gRPC server over vsock, through the SDK's
+# generated client.
+function-sdk-rust = "0.6.0"
 http = "1"
 hyper-util = { version = "0.1", features = ["tokio"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "net", "time", "sync"] }
@@ -35,7 +37,6 @@ tonic = "0.14"
 tower = { version = "0.5", features = ["util"] }
 
 [dev-dependencies]
-function-sdk-rust = "0.6.0"
 # The crate's own tests use its testing module.
 guestfn-engine-oci = { path = ".", features = ["testutil"] }
 prost = "0.14"

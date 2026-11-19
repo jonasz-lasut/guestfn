@@ -3,15 +3,14 @@
 //! ceilings (`Config`), one run's narrowing and grants (`RunOptions`), the
 //! inspection a tool reads, the egress seam (`wire::HttpRequester`), the
 //! run slots and the memory pool (`concurrency`), the Go-style durations,
-//! the Prometheus series (`metrics`), the pass-through gRPC codec (`grpc`)
-//! and the writing half of the OCI image layout (`layout`). An engine is a
+//! the Prometheus series (`metrics`) and the writing half of the OCI image
+//! layout (`layout`). An engine is a
 //! crate of its own beside this one: guestfn-engine-wasm, the Wasmtime
 //! engine, and guestfn-engine-oci, the OCI engine of
 //! docs/one-pager-oci-runtime.md (a Firecracker microVM per request).
 
 pub mod concurrency;
 pub mod duration;
-pub mod grpc;
 pub mod layout;
 pub mod metrics;
 pub mod wire;
@@ -21,6 +20,8 @@ pub use wire::HttpRequester;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use function_sdk_rust::proto::v1::{RunFunctionRequest, RunFunctionResponse};
 
 /// Defaults applied for unset Config fields.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -54,6 +55,8 @@ pub enum RunFailure {
     /// The module stopped without answering: a trap, an exit, a signal, a
     /// failed instantiation.
     Stopped,
+    /// The module answered, and its answer is no RunFunctionResponse.
+    Undecodable,
     /// The host could not start the run, or lost it.
     Host,
 }
@@ -374,10 +377,17 @@ pub trait Engine: Send + Sync + 'static {
     fn keep_in(&self, _store: Arc<dyn ArtifactStore>) {}
 
     /// Runs one request through a module under the run's options and
-    /// returns the response bytes; every failure is a `RunError`, whose
-    /// message is the fatal result's and whose kind says how the run
-    /// ended.
-    fn run(&self, m: &Self::Module, request: &[u8], opts: RunOptions) -> Result<Vec<u8>, RunError>;
+    /// returns its response; every failure is a `RunError`, whose message
+    /// is the fatal result's and whose kind says how the run ended. The
+    /// request is the engine's to encode for its module, whichever way the
+    /// module takes it: the caller keeps what it needs of it before the
+    /// call.
+    fn run(
+        &self,
+        m: &Self::Module,
+        request: RunFunctionRequest,
+        opts: RunOptions,
+    ) -> Result<RunFunctionResponse, RunError>;
 
     /// What namespaces the compiled store on disk: an artifact is loaded
     /// only by the engine version that wrote it.

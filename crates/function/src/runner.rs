@@ -13,7 +13,6 @@ use function_sdk_rust::proto::v1::{
 };
 use function_sdk_rust::response;
 use guestfn_engine::{Engine, RunOptions};
-use prost::Message;
 use tonic::{Request, Response, Status};
 
 use crate::admission;
@@ -60,19 +59,29 @@ impl<E: Engine> WasmFunction<E> {
     /// an operator of a shared runtime can see what is being refused without
     /// reading every XR's conditions. The response is the SDK's
     /// response::to: the request's tag, desired state and context, copied
-    /// here on the fatal path alone, which a request that runs to
-    /// completion never needs (the guest's own response goes back).
+    /// here for a request that is refused before it runs.
     fn fatal(
         &self,
         req: &RunFunctionRequest,
         outcome: &str,
         reason: String,
     ) -> RunFunctionResponse {
+        self.fatal_of(Kept::of(req), outcome, reason)
+    }
+
+    /// The fatal result of a request the engine was handed, from what the
+    /// runtime kept of it.
+    fn fatal_of(&self, kept: Kept, outcome: &str, reason: String) -> RunFunctionResponse {
         tracing::info!(outcome, reason = %reason, "Request ended with a fatal result");
         guestfn_engine::metrics::REQUESTS
             .with_label_values(&[outcome])
             .inc();
-        let mut rsp = response::to(req, self.ttl);
+        let mut rsp = RunFunctionResponse {
+            meta: Some(self.response_meta(kept.tag)),
+            desired: kept.desired,
+            context: kept.context,
+            ..Default::default()
+        };
         response::fatal(&mut rsp, reason);
         rsp
     }
@@ -106,6 +115,27 @@ impl<E: Engine> WasmFunction<E> {
                 nanos: self.ttl.subsec_nanos() as i32,
             }),
             ..Default::default()
+        }
+    }
+}
+
+/// What the runtime keeps of a request once the engine has it: the parts a
+/// fatal result takes back to the caller (response::to's), the desired
+/// state among them, which the output fence diffs the response's against.
+/// The engine owns the request it encodes for its module, so these are
+/// copied before the run.
+struct Kept {
+    tag: String,
+    desired: Option<function_sdk_rust::proto::v1::State>,
+    context: Option<pbjson_types::Struct>,
+}
+
+impl Kept {
+    fn of(req: &RunFunctionRequest) -> Kept {
+        Kept {
+            tag: req.meta.as_ref().map(|m| m.tag.clone()).unwrap_or_default(),
+            desired: req.desired.clone(),
+            context: req.context.clone(),
         }
     }
 }
@@ -445,8 +475,7 @@ impl<E: Engine> WasmFunction<E> {
         // (none under config.allowEmpty with an unset field, so the module
         // reads an unconfigured Input), and the step credentials the module
         // was not granted left out, the pull credential unconditionally.
-        // Nothing past this point reads either of the request, so they are
-        // made in place. The engine works on the protobuf bytes.
+        // They are made in place: the request is the engine's from here.
         if input.config.is_some() {
             let fields = &mut req.input.get_or_insert_with(Default::default).fields;
             fields.remove("config");
@@ -474,7 +503,15 @@ impl<E: Engine> WasmFunction<E> {
             );
         }
         req.credentials.retain(|name, _| forward(name));
-        let forwarded = req.encode_to_vec();
+        // The engine encodes the request for its module and owns it from
+        // here. What the runtime needs of it afterwards is copied now: the
+        // parts of a fatal result and of the output fence's diff.
+        let fenced_reads =
+            admission::require_fenced(self.policy.as_deref(), admitted.composition.as_deref());
+        let fenced_output =
+            admission::compose_fenced(self.policy.as_deref(), admitted.composition.as_deref());
+        let kept = Kept::of(&req);
+        let composite = fenced_output.then(|| composite_kind_from(&req)).flatten();
         // The per-run client logs every request with the module's reference
         // and digest attached.
         let http = caps.grant.map(|grant| {
@@ -515,9 +552,7 @@ impl<E: Engine> WasmFunction<E> {
             } else {
                 None
             };
-            engine
-                .run(&module, &forwarded, opts)
-                .map_err(|e| e.to_string())
+            engine.run(&module, req, opts).map_err(|e| e.to_string())
         })
         .await;
         let out = match out {
@@ -525,42 +560,25 @@ impl<E: Engine> WasmFunction<E> {
             Err(e) => {
                 // A panic in the run is this request's fatal result, never
                 // the process's end.
-                return self.fatal(
-                    &req,
+                return self.fatal_of(
+                    kept,
                     OUTCOME_ERROR,
                     format!("internal error while running the module: {e}"),
                 );
             }
         };
-        let out = match out {
-            Ok(out) => out,
+        // A run that failed, a response that does not decode among the
+        // failures: the module's, in the engine's words.
+        let mut got = match out {
+            Ok(got) => got,
             Err(e) => {
-                return self.fatal(
-                    &req,
+                return self.fatal_of(
+                    kept,
                     OUTCOME_ERROR,
                     format!("module {} failed: {e}", resolved.description),
                 );
             }
         };
-        // A response the message cannot decode never goes back: it is the
-        // module's failure.
-        let mut got = match RunFunctionResponse::decode(out.as_slice()) {
-            Ok(got) => got,
-            Err(e) => {
-                return self.fatal(
-                    &req,
-                    OUTCOME_ERROR,
-                    format!(
-                        "module {} failed: cannot decode response: {e}",
-                        resolved.description
-                    ),
-                );
-            }
-        };
-        let fenced_reads =
-            admission::require_fenced(self.policy.as_deref(), admitted.composition.as_deref());
-        let fenced_output =
-            admission::compose_fenced(self.policy.as_deref(), admitted.composition.as_deref());
         // The read fence (requireResource, #208): where a policy layer
         // scopes the action, every resource selector the module's response
         // asks Crossplane for must be permitted - a response carrying a
@@ -584,8 +602,8 @@ impl<E: Engine> WasmFunction<E> {
                 )
             });
             if let Err(e) = judged {
-                return self.fatal(
-                    &req,
+                return self.fatal_of(
+                    kept,
                     OUTCOME_REFUSED,
                     format!("module {} {e}", resolved.description),
                 );
@@ -598,9 +616,8 @@ impl<E: Engine> WasmFunction<E> {
         // Crossplane, so it is not judged and the guest's own message stays
         // the one the author reads.
         if fenced_output && !carries_fatal(&got) {
-            let composite = composite_kind_from(&req);
             let judged = crate::compose::changes(
-                req.desired.as_ref(),
+                kept.desired.as_ref(),
                 got.desired.as_ref(),
                 composite.as_ref().map(|(g, k)| (g.as_str(), k.as_str())),
             )
@@ -620,8 +637,8 @@ impl<E: Engine> WasmFunction<E> {
                 )
             });
             if let Err(e) = judged {
-                return self.fatal(
-                    &req,
+                return self.fatal_of(
+                    kept,
                     OUTCOME_REFUSED,
                     format!("module {} {e}", resolved.description),
                 );
@@ -633,7 +650,7 @@ impl<E: Engine> WasmFunction<E> {
             .with_label_values(&["ok"])
             .inc();
         if got.meta.is_none() {
-            got.meta = Some(self.response_meta(tag));
+            got.meta = Some(self.response_meta(kept.tag));
         }
         got
     }
@@ -729,6 +746,8 @@ pub(crate) fn parse_grpc_timeout(v: &str) -> Option<Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use prost::Message as _;
 
     use function_sdk_rust::proto::v1::{
         CredentialData, Credentials, RequestMeta, Severity, credentials,
@@ -1714,6 +1733,33 @@ mod tests {
         );
         assert!(errors() >= before + 1.0, "counted as an error");
         assert_eq!(rsp.meta.expect("meta").tag, "t");
+    }
+
+    /// A fatal result after the run carries the caller's desired state and
+    /// context as one before it does: the engine has the request by then,
+    /// and the runtime answers from what it kept.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_fatal_result_after_the_run_carries_the_desired_state_and_context() {
+        // Field 1 (meta) announcing more bytes than follow.
+        let (dir, _) = fenced_stage(&RunFunctionResponse::default(), &[0x0a, 0x7f, 0x01]);
+        let f = function(Some(dir.path().to_owned()));
+        let req = request_with_composite(
+            input(serde_json::json!({"type": "Path", "path": "fn.wasm"})),
+            serde_json::json!({"kind": "Bucket", "metadata": {"namespace": "team-a"}}),
+        );
+        let rsp = f.handle(req.clone(), None).await;
+        let [(severity, message)] = results(&rsp)[..] else {
+            panic!("want one result, got {:?}", rsp.results);
+        };
+        assert_eq!(severity, Severity::Fatal as i32);
+        assert!(
+            message.starts_with("module module file fn.wasm failed: cannot decode response: "),
+            "{message}"
+        );
+        assert_eq!(rsp.meta.as_ref().expect("meta").tag, "t");
+        assert_eq!(rsp.desired, req.desired);
+        assert_eq!(rsp.context, req.context);
+        assert!(rsp.desired.is_some() && rsp.context.is_some());
     }
 
     /// The output fence's stage: a module whose run returns `rsp` as given
