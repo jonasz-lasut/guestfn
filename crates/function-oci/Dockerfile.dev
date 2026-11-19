@@ -6,7 +6,7 @@
 # once (make oci.tools), then wraps them here. The build context is a
 # directory holding the binary as `function`, `init`, `firecracker` and
 # `vmlinux` for the platform the image is built for.
-FROM cgr.dev/chainguard/glibc-dynamic:latest@sha256:48ce6d7d3006f17054a54ef41aac5222ac308282db6d67ed508cf024a6df04de
+FROM cgr.dev/chainguard/glibc-dynamic:latest@sha256:a49f6f693aa4605a518b2f3fb9ee39f71801d5f072d6e84794c7eef579ddc217
 WORKDIR /
 COPY function /function
 COPY init /usr/lib/guestfn/init
