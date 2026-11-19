@@ -1,0 +1,54 @@
+# Copyright 2026 The guestfn Authors.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The Renovate configuration, checked with Renovate's own validator. It
+# runs on a pull request that changes the file and on no other: ci.yml
+# skips its jobs for such a change (detect-noop), since no test reads the
+# file. --strict also fails on an option Renovate would migrate, so the
+# file is kept in the current spelling.
+name: Renovate Config
+
+on:
+  pull_request:
+    paths:
+      - '.github/renovate.json5'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # renovate: datasource=npm depName=renovate
+  RENOVATE_VERSION: 44.252.8
+
+jobs:
+  validate:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+
+      - name: Validate
+        run: npx --yes --package "renovate@${RENOVATE_VERSION}" renovate-config-validator --strict .github/renovate.json5
