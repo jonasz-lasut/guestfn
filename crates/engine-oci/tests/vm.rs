@@ -592,6 +592,16 @@ fn what_a_run_left_is_logged_after_its_answer() {
         "guestfn-init: exited status=None signal=Some(9) oom=false",
     ]);
     assert_eq!(console.len(), 1, "{console:?}");
+    // The same exit as the host read it off the protocol, which no console
+    // has to carry.
+    let exit = with(&[
+        "DEBUG",
+        "message=the process's exit after its answer",
+        "status=None",
+        "signal=Some(9)",
+        "oom=false",
+    ]);
+    assert_eq!(exit.len(), 1, "{exit:?}");
 }
 
 /// A root filesystem packed with a compressor the guest kernel was built

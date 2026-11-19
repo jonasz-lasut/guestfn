@@ -329,7 +329,8 @@ inside both bounds of the engine. The runtime drops its engine when it shuts dow
 engine waits until it has stopped every VM, which keeps a shutdown from
 leaving a VMM running. The kernel kills a process past its cap. The
 init reports the exit, and the fatal states the limit as the Wasmtime
-limiter's does.
+limiter's does. After the response there's no result to fail, and the
+runtime logs a warning that states the limit.
 
 **Egress.** The VM has no network interface, and until the proxy exists
 `function-oci` refuses a manifest that requires egress, by name. The proxy

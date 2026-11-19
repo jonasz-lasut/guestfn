@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 use crate::concurrency::{MemPool, OwnedSlot, format_bytes};
 use crate::{Error, RunError, RunFailure, RunOptions, metrics};
 
+use crate::protocol::Exit;
 use crate::sandbox::{Ended, OUTPUT_CAP, Outcome, Output, Rest, Run, VmSpec};
 use crate::{Image, Module, Oci, Rootfs, timeline};
 
@@ -163,6 +164,8 @@ struct Teardown {
     bounds: Bounds,
     image: Module,
     opts: RunOptions,
+    /// The run's memory limit, which a late exit's warning names.
+    process_mib: u64,
     marks: timeline::Handle,
 }
 
@@ -173,6 +176,7 @@ impl Teardown {
             bounds,
             image,
             opts,
+            process_mib,
             marks,
         } = self;
         timeline::adopt(marks);
@@ -182,6 +186,7 @@ impl Teardown {
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| rest.finish())) {
             Ok(remains) => {
                 report(remains.log, &remains.console, &opts);
+                report_late_exit(remains.exit.as_ref(), process_mib, &opts);
             }
             Err(_) => tracing::error!(
                 module = %opts.module,
@@ -275,6 +280,7 @@ pub(crate) fn run(
                 bounds,
                 image: Arc::clone(image),
                 opts,
+                process_mib,
                 marks: timeline::handle(),
             });
             answered
@@ -352,6 +358,29 @@ fn report(log: Output, console: &str, opts: &RunOptions) -> String {
     }
     timeline::mark("output-logged");
     output
+}
+
+/// How the process of an answered run ended, as the runtime's log. The
+/// response is the caller's by then, so nothing fails: a process the memory
+/// limit killed after its answer shows here and nowhere else.
+fn report_late_exit(exit: Option<&Exit>, process_mib: u64, opts: &RunOptions) {
+    let Some(exit) = exit else { return };
+    if exit.oom {
+        tracing::warn!(
+            module = %opts.module,
+            digest = %opts.digest,
+            "process was killed after it answered: the run's memory limit of {} was exceeded",
+            format_bytes(process_mib << 20)
+        );
+    }
+    tracing::debug!(
+        module = %opts.module,
+        digest = %opts.digest,
+        status = ?exit.status,
+        signal = ?exit.signal,
+        oom = exit.oom,
+        "the process's exit after its answer"
+    );
 }
 
 /// A run that is over: what it left is logged, and how the VM ended

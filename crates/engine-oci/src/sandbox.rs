@@ -250,6 +250,9 @@ pub struct Remains {
     pub log: Output,
     /// The serial console's output, as `Outcome::console`.
     pub console: String,
+    /// How the process ended once it was told to stop: None when the init
+    /// did not say within its grace.
+    pub exit: Option<Exit>,
 }
 
 pub trait Sandbox: Send + Sync + 'static {

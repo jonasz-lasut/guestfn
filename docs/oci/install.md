@@ -196,7 +196,10 @@ function, is a fatal result on the step, as a component's error is: `module … 
 the call: <the last line it logged>`. A process the init can't start is `module … failed: cannot start the process: <error>`, and one a signal ended is `module … failed: process was killed by signal 9: <the last line it logged>`. The deadline and the memory limit end the run the same
 way: `module … failed: run failed: module exceeded its execution deadline
 (30s)` and `module … failed: process was killed: the run's memory limit of
-512Mi was exceeded`. A VM whose init never reaches the host before the
+512Mi was exceeded`. When the memory limit kills a process after its answer,
+the response is already the caller's: the runtime logs the warning `process
+was killed after it answered: the run's memory limit of 512Mi was exceeded`.
+A VM whose init never reaches the host before the
 deadline is the runtime's failure, not the module's: `module … failed: run
 failed: the guest did not connect before the deadline: the VM booted but
 its init never reached the host`. The VM's serial console, which `--debug`
