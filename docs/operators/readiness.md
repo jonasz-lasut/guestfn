@@ -10,7 +10,8 @@ The runtime reports readiness in two places: the gRPC health service
 (`grpc.health.v1.Health`) on the function port, and plain HTTP `/readyz` on
 `--health-address` (`:8081`), which also serves `/livez`. Readiness means the
 caches are open, the engine is up and the modules named by `--warm-modules`
-(none by default) are loaded.
+(none by default) are loaded. Until then the runtime answers `RunFunction` with
+`UNAVAILABLE`, and Crossplane retries the step.
 
 Use the HTTP endpoints for Kubernetes probes. Crossplane runs functions with
 mTLS on the function port and kubelet's gRPC probe dials without credentials,
@@ -48,7 +49,8 @@ restart compiles again even on a volume, which keeps only the fetched module.
 `--warm-modules` moves that work ahead of readiness.
 
 With the flag set, the runtime listens at once but reports `NOT_SERVING` (and `/readyz` answers 503)
-while it loads the listed modules, one after another. With a warm volume each load takes
+while it loads the listed modules, one after another. A `RunFunction` call in
+that time gets `UNAVAILABLE` (`the function is not ready`) and runs nothing. With a warm volume each load takes
 milliseconds. With a cold cache each costs one compile. The runtime reports
 `SERVING` when every entry has loaded or failed. `/livez` answers throughout, so
 a liveness probe is unaffected.

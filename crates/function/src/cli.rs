@@ -460,7 +460,7 @@ where
 
     // The health endpoints answer while warm-up runs: a probe reads
     // not-ready rather than a refused connection, and an early request is
-    // simply served cold or joins the load in flight.
+    // answered UNAVAILABLE.
     if !args.sdk.metrics_address.is_empty() {
         let address = args.sdk.metrics_address.clone();
         tokio::spawn(async move {
@@ -479,9 +479,10 @@ where
             }
         });
     }
-    // The server (grpc.rs) hands out the gRPC health reporter, so readiness
-    // on the function port starts as NOT_SERVING and flips with /readyz.
-    let (health, server) = grpc::serve(Arc::new(function), &args.sdk).await?;
+    // The server (grpc.rs) starts not ready: the function port reports
+    // NOT_SERVING and answers RunFunction with UNAVAILABLE until warm-up
+    // is done, when it flips with /readyz.
+    let (not_ready, server) = grpc::serve(Arc::new(function), &args.sdk).await?;
     {
         // Warm-up shares the request path's cache, so a warmed module is
         // exactly what a request would have loaded; failures never hold
@@ -499,7 +500,7 @@ where
             }
             ops::warm(&entries, &resolver, &module_cache, &engine).await;
             readiness.ready();
-            health.set_serving::<grpc::FunctionServer<E>>().await;
+            not_ready.ready().await;
         });
     }
     server.await

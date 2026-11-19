@@ -269,7 +269,8 @@ TTL 10 minutes, LRU-bounded. `docs/one-pager-cache.md`,
 
 gRPC health and `/readyz` start not-ready and flip after warm-up
 (`--warm-modules`), which runs while the server already listens; a failed
-entry never holds readiness back. `--max-concurrent-runs` is a fair
+entry never holds readiness back. Until then `RunFunction` is answered
+`UNAVAILABLE` (`grpc::Gate`), as function-sdk-rust's `Server` answers it. `--max-concurrent-runs` is a fair
 round-robin scheduler keyed by module digest. Slot, memory-pool and step-slot
 waits are capped by the request's gRPC deadline, and a request cut short while
 waiting is a fatal result not counted as a run. `docs/operators/readiness.md`,
@@ -600,7 +601,8 @@ One line each; the record named holds the reasoning.
   credentials it was granted (2026-10).
 - The gRPC server is assembled in `grpc.rs`, not by the SDK's `Server`
   (Jonasz, 2026-08-26): it has one caller, and owning it lets warm-up flip
-  gRPC health while requests are already served.
+  gRPC health. It holds `RunFunction` back until then as the SDK's does
+  (Jonasz, 2026-11-19).
 - Wasmtime is the only reader of a WebAssembly module (Jonasz, 2026-08-17):
   no second decoder, so every verdict `guestfn` or `validate` prints is the
   runtime's.

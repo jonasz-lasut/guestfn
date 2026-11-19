@@ -1,36 +1,89 @@
 //! The gRPC server: the FunctionRunnerService tonic generates from the
-//! SDK's proto, served over WasmFunction, with TLS, health, reflection and
-//! shutdown assembled as function-sdk-rust's serve assembles them. The
-//! server is built here, not by the SDK's Server, because the runtime
-//! serves requests while warm-up still runs and reports that through the
-//! health service alone, where the SDK's holds RunFunction back until it
-//! is ready.
+//! SDK's proto, served over WasmFunction, with TLS, health, reflection,
+//! shutdown and the hold on RunFunction until the function is ready
+//! assembled as function-sdk-rust's Server assembles them. The server is
+//! still built here, not by the SDK's: the runtime serves /metrics itself
+//! from the engine's registry (ops.rs), and a test serves on a listener it
+//! bound, neither of which the SDK's Server takes.
 
 use std::future::Future;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use function_sdk_rust::proto::v1::function_runner_service_server::FunctionRunnerServiceServer;
+use function_sdk_rust::proto::v1::function_runner_service_server::{
+    FunctionRunnerService, FunctionRunnerServiceServer, SERVICE_NAME,
+};
+use function_sdk_rust::proto::v1::{RunFunctionRequest, RunFunctionResponse};
 use guestfn_engine::Engine;
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
+use tonic::{Request, Response, Status};
+use tonic_health::ServingStatus;
+use tonic_health::server::HealthReporter;
 
 use crate::runner::WasmFunction;
 
-/// The served FunctionRunnerService, as the health service names it.
-pub type FunctionServer<E> = FunctionRunnerServiceServer<WasmFunction<E>>;
+/// Answers RunFunction with UNAVAILABLE until the function is ready, in
+/// function-sdk-rust's words: warm-up loads what the operator named before
+/// a request is run, and a caller that arrives early retries.
+pub struct Gate<E: Engine> {
+    function: Arc<WasmFunction<E>>,
+    ready: Arc<AtomicBool>,
+}
+
+#[tonic::async_trait]
+impl<E: Engine> FunctionRunnerService for Gate<E> {
+    async fn run_function(
+        &self,
+        request: Request<RunFunctionRequest>,
+    ) -> Result<Response<RunFunctionResponse>, Status> {
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Status::unavailable("the function is not ready"));
+        }
+        self.function.run_function(request).await
+    }
+}
+
+/// The served FunctionRunnerService.
+pub type FunctionServer<E> = FunctionRunnerServiceServer<Gate<E>>;
 
 /// The FunctionRunnerService over function: the generated server, whose
 /// codec is the SDK's messages. They keep the fields they do not know, so
 /// a field newer than the vendored proto crosses the runtime both ways.
 fn service<E: Engine>(
     function: Arc<WasmFunction<E>>,
+    ready: Arc<AtomicBool>,
     max_decoding_message_size: Option<usize>,
 ) -> FunctionServer<E> {
-    let service = FunctionRunnerServiceServer::from_arc(function);
+    let service = FunctionRunnerServiceServer::new(Gate { function, ready });
     match max_decoding_message_size {
         Some(size) => service.max_decoding_message_size(size),
         None => service,
+    }
+}
+
+/// What a server that is not ready yet hands its caller: until
+/// [`NotReady::ready`], RunFunction is answered UNAVAILABLE and the gRPC
+/// health service reports NOT_SERVING, overall and for the function.
+pub struct NotReady {
+    ready: Arc<AtomicBool>,
+    health: HealthReporter,
+}
+
+impl NotReady {
+    /// The function is ready: RunFunction runs from here on, and health
+    /// reports SERVING.
+    pub async fn ready(self) {
+        self.ready.store(true, Ordering::Release);
+        set_health(&self.health, ServingStatus::Serving).await;
+    }
+}
+
+/// Sets the overall ("") and the FunctionRunnerService health status.
+async fn set_health(reporter: &HealthReporter, status: ServingStatus) {
+    for service in ["", SERVICE_NAME] {
+        reporter.set_service_status(service, status).await;
     }
 }
 
@@ -38,19 +91,12 @@ fn service<E: Engine>(
 /// function-sdk-rust's serve (mTLS from the certs dir unless insecure, v1
 /// and v1alpha reflection, gRPC health, graceful shutdown on SIGTERM or
 /// SIGINT), assembled here from the same public pieces. Hands back the
-/// health reporter with the service NOT_SERVING next to the server future,
-/// so warm-up flips readiness when it finishes; requests are served
-/// regardless of health, and nothing listens until the future is awaited.
+/// server not ready, next to its future: warm-up calls [`NotReady::ready`]
+/// when it finishes. Nothing listens until the future is awaited.
 pub async fn serve<E: Engine>(
     function: Arc<WasmFunction<E>>,
     args: &function_sdk_rust::Args,
-) -> Result<
-    (
-        tonic_health::server::HealthReporter,
-        impl Future<Output = Result<(), String>> + use<E>,
-    ),
-    String,
-> {
+) -> Result<(NotReady, impl Future<Output = Result<(), String>> + use<E>), String> {
     let address: SocketAddr = args
         .address
         .parse()
@@ -67,13 +113,7 @@ pub async fn serve_on<E: Engine>(
     function: Arc<WasmFunction<E>>,
     args: &function_sdk_rust::Args,
     listener: tokio::net::TcpListener,
-) -> Result<
-    (
-        tonic_health::server::HealthReporter,
-        impl Future<Output = Result<(), String>> + use<E>,
-    ),
-    String,
-> {
+) -> Result<(NotReady, impl Future<Output = Result<(), String>> + use<E>), String> {
     serve_from(function, args, Listen::On(listener)).await
 }
 
@@ -89,13 +129,7 @@ async fn serve_from<E: Engine>(
     function: Arc<WasmFunction<E>>,
     args: &function_sdk_rust::Args,
     listen: Listen,
-) -> Result<
-    (
-        tonic_health::server::HealthReporter,
-        impl Future<Output = Result<(), String>> + use<E>,
-    ),
-    String,
-> {
+) -> Result<(NotReady, impl Future<Output = Result<(), String>> + use<E>), String> {
     let mut builder = Server::builder();
     if !args.insecure {
         let dir = args
@@ -107,7 +141,8 @@ async fn serve_from<E: Engine>(
             .map_err(|e| format!("cannot configure TLS: {e}"))?;
     }
 
-    let service = service(function, args.max_recv_message_size);
+    let ready = Arc::new(AtomicBool::new(false));
+    let service = service(function, Arc::clone(&ready), args.max_recv_message_size);
 
     let reflection_v1 = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(function_sdk_rust::proto::FILE_DESCRIPTOR_SET)
@@ -118,8 +153,10 @@ async fn serve_from<E: Engine>(
         .build_v1alpha()
         .map_err(|e| format!("cannot build gRPC reflection service: {e}"))?;
 
-    let (health_reporter, health_service) = tonic_health::server::health_reporter();
-    health_reporter.set_not_serving::<FunctionServer<E>>().await;
+    // The statuses are set before anything listens, so no probe sees
+    // SERVING ahead of warm-up.
+    let (health, health_service) = tonic_health::server::health_reporter();
+    set_health(&health, ServingStatus::NotServing).await;
 
     // The gRPC server metrics, pre-created at zero the way
     // grpc-prometheus's InitializeMetrics does; the layer wraps the whole
@@ -151,7 +188,7 @@ async fn serve_from<E: Engine>(
         }
         .map_err(|e| format!("gRPC server error: {e}"))
     };
-    Ok((health_reporter, server))
+    Ok((NotReady { ready, health }, server))
 }
 
 fn tls_config(dir: &Path) -> Result<ServerTlsConfig, String> {
@@ -272,7 +309,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn a_request_that_does_not_decode_is_a_grpc_error() {
         let function = runtime::builder().build();
-        let mut server = service(Arc::new(function), None);
+        let mut server = service(Arc::new(function), Arc::new(AtomicBool::new(true)), None);
         // An observed composed resource whose field name is no UTF-8, six
         // messages deep, and a context that announces more bytes than
         // follow.
@@ -294,6 +331,113 @@ mod tests {
                 .map(percent_decoded)
                 .unwrap_or_default();
             assert_eq!(said, want.to_string());
+        }
+    }
+
+    /// Until the function is ready RunFunction is answered UNAVAILABLE, in
+    /// function-sdk-rust's words, and nothing runs; from then on it runs.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn run_function_is_unavailable_until_the_function_is_ready() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("fn.wasm"), guests::echo_component()).expect("write");
+        let function = runtime::builder().module_dir(dir.path()).build();
+        let ready = Arc::new(AtomicBool::new(false));
+        let mut server = service(Arc::new(function), Arc::clone(&ready), None);
+        let message = RunFunctionRequest {
+            input: Some(resource::json_to_struct(
+                serde_json::json!({
+                    "apiVersion": "guestfn.crossplane.io/v1",
+                    "kind": "Input",
+                    "module": {"type": "Path", "path": "fn.wasm"},
+                })
+                .as_object()
+                .expect("object"),
+            )),
+            ..Default::default()
+        }
+        .encode_to_vec();
+        let runs = || {
+            guestfn_engine::metrics::sample(
+                "guestfn_module_run_duration_seconds",
+                &[("outcome", "ok")],
+            )
+            .unwrap_or(0.0)
+        };
+        let before = runs();
+
+        let (headers, _) = respond(&mut server, &[], &message).await;
+        let header = |name: &str| {
+            headers
+                .get(name)
+                .and_then(|v| v.to_str().ok())
+                .map(percent_decoded)
+        };
+        assert_eq!(header("grpc-status").as_deref(), Some("14"), "UNAVAILABLE");
+        assert_eq!(
+            header("grpc-message").as_deref(),
+            Some("the function is not ready")
+        );
+        assert_eq!(runs(), before, "nothing ran");
+
+        ready.store(true, Ordering::Release);
+        let rsp = call(&mut server, &[], &message).await;
+        assert_eq!(rsp.results, []);
+        assert!(runs() > before);
+    }
+
+    /// The health service reports NOT_SERVING, overall and for the
+    /// function, from the first connection until the function is ready.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn health_is_not_serving_until_the_function_is_ready() {
+        use tonic_health::pb::health_check_response::ServingStatus as Reported;
+        use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let args = function_sdk_rust::Args {
+            debug: false,
+            address: format!("127.0.0.1:{port}"),
+            tls_certs_dir: None,
+            insecure: true,
+            max_recv_message_size: None,
+            metrics_address: String::new(),
+        };
+        let function = Arc::new(runtime::builder().build());
+        let (not_ready, server) = serve_on(function, &args, listener).await.expect("serve");
+        tokio::spawn(server);
+        let channel = tonic::transport::Endpoint::from_shared(format!("http://127.0.0.1:{port}"))
+            .expect("endpoint")
+            .connect()
+            .await
+            .expect("connect");
+        let mut health = HealthClient::new(channel);
+        let mut reported = async |service: &str| {
+            health
+                .check(HealthCheckRequest {
+                    service: service.to_string(),
+                })
+                .await
+                .expect("check")
+                .into_inner()
+                .status
+        };
+
+        for service in ["", SERVICE_NAME] {
+            assert_eq!(
+                reported(service).await,
+                Reported::NotServing as i32,
+                "{service:?}"
+            );
+        }
+        not_ready.ready().await;
+        for service in ["", SERVICE_NAME] {
+            assert_eq!(
+                reported(service).await,
+                Reported::Serving as i32,
+                "{service:?}"
+            );
         }
     }
 
@@ -326,7 +470,7 @@ mod tests {
         )
         .expect("write");
         let function = runtime::builder().module_dir(dir.path()).build();
-        let mut server = service(Arc::new(function), None);
+        let mut server = service(Arc::new(function), Arc::new(AtomicBool::new(true)), None);
         let message = RunFunctionRequest {
             input: Some(resource::json_to_struct(
                 serde_json::json!({
