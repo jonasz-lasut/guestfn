@@ -634,6 +634,15 @@
     // A release waits three days before it is proposed, as an action's
     // does, so one pulled or replaced within hours never merges.
     { matchManagers: ['cargo', 'npm', 'gomod', 'nuget'], minimumReleaseAge: '3 days' },
+    // The comment naming the wasmtime-wasi-http release in the guests'
+    // worlds waits with the crates it shares the wasmtime group with:
+    // ungated, it opened the group's pull request alone, hours after a
+    // release, with a stale guest stamp and no crate bump.
+    {
+      matchManagers: ['custom.regex'],
+      matchPackageNames: ['wasmtime-wasi-http'],
+      minimumReleaseAge: '3 days',
+    },
     // Never by itself, whatever the size of the bump: the sandbox
     // (wasmtime and what moves with it), signature verification, both
     // policy layers' engine, the VMM, and the updates that are the signal
