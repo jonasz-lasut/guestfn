@@ -1,4 +1,4 @@
-//! The gRPC server metrics, served over the raw-codec
+//! The gRPC server metrics, a layer around the
 //! transport: `grpc_server_started_total`, `grpc_server_handled_total`,
 //! `grpc_server_msg_received_total` and `grpc_server_msg_sent_total`, with
 //! the names, labels and help strings of function-sdk-go's grpc-prometheus

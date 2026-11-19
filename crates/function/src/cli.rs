@@ -479,9 +479,8 @@ where
             }
         });
     }
-    // The raw server hands the guest the caller's exact bytes (grpc.rs)
-    // and hands out the gRPC health reporter, so readiness on the function
-    // port starts as NOT_SERVING and flips with /readyz.
+    // The server (grpc.rs) hands out the gRPC health reporter, so readiness
+    // on the function port starts as NOT_SERVING and flips with /readyz.
     let (health, server) = grpc::serve(Arc::new(function), &args.sdk).await?;
     {
         // Warm-up shares the request path's cache, so a warmed module is
@@ -500,7 +499,7 @@ where
             }
             ops::warm(&entries, &resolver, &module_cache, &engine).await;
             readiness.ready();
-            health.set_serving::<grpc::RawFunctionServer<E>>().await;
+            health.set_serving::<grpc::FunctionServer<E>>().await;
         });
     }
     server.await

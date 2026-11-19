@@ -37,12 +37,12 @@ record.
 
 ## Request flow
 
-`WasmFunction::handle_raw` in `crates/function/src/runner.rs` runs these steps
-on the raw request bytes. `docs/how-a-request-runs.md` is the reader's version.
+`WasmFunction::handle` in `crates/function/src/runner.rs` runs these steps on
+the request, function-sdk-rust's `RunFunctionRequest`.
+`docs/how-a-request-runs.md` is the reader's version.
 
-1. **Decode and admit.** Check that the bytes decode (`partial.rs`: a walk
-   against the schema that builds nothing; prost decides what the walk
-   declines) and decode only what admission reads. The 0.6 group
+1. **Decode and admit.** tonic decodes the request into the SDK's message,
+   and one that doesn't decode is a gRPC error. The 0.6 group
    `wasm.fn.crossplane.io` is refused by name (`input::renamed_group`).
    `admission::admit` compiles `compositionPolicy` (content-hash cached,
    malformed Cedar is fatal), checks `limits` against the ceiling flags and
@@ -50,8 +50,8 @@ on the raw request bytes. `docs/how-a-request-runs.md` is the reader's version.
 2. **Resolve `from`.** `from::from_composite` reads `module.from` from the
    observed XR, fenced by the composition layer (`pullModule`,
    `spendCredential`, default-deny). An unset field under `allowEmpty` ends the
-   request: the desired state and context are echoed at the wire level
-   (`protowire::noop_response`, `requests_total{outcome="skipped"}`).
+   request: the desired state and context are echoed (the SDK's
+   `response::to`, `requests_total{outcome="skipped"}`).
    `from::config_from_composite` reads `config.from` the same way.
 3. **Registry auth** from the step credential (`oci::auth_for`).
 4. **Resolve** (`resolver.rs`, no I/O): the digest comes from the Input (the
@@ -66,15 +66,16 @@ on the raw request bytes. `docs/how-a-request-runs.md` is the reader's version.
    `admission::admit_requires`: the three-layer AND yields the run's
    capabilities or a fatal result. `manifest.check` holds the configuration to
    the manifest's schema, `sandboxenv` materializes env bindings and checks the
-   required credentials, and `protowire::retain_credentials` drops every step
-   credential not granted.
+   required credentials, and the runner drops every step credential not
+   granted from the request it forwards.
 7. **Step slot** (`limits.concurrency`), the wait capped by the gRPC deadline.
 8. **Run** (`engine.run`): run slot and memory reservation first, a fresh
    store, WASI argv `["function"]`, no network, `/tmp` and env only as granted,
    the epoch deadline capped by the gRPC deadline, `wasi:http` through the
    egress client. The configuration read at step 2 is written into the
-   forwarded Input (`protowire::replace_input_config`). A response that doesn't
-   decode is a fatal result (`cannot decode response`).
+   forwarded Input. The engine takes the request encoded, and its answer is
+   decoded: a response that doesn't decode is a fatal result (`cannot decode
+   response`).
    - 8a. **Read fence** (`require.rs`, `admission::admit_require`), where a
      layer scopes `requireResource`: every resource selector of the response's
      requirements. A response carrying a fatal result is judged too.
@@ -82,9 +83,9 @@ on the raw request bytes. `docs/how-a-request-runs.md` is the reader's version.
      layer scopes `composeResource`: every change to the desired state, diffed
      by composition resource name. A response carrying a fatal result isn't
      judged.
-9. **Return** the guest's bytes verbatim, with `meta` appended at the wire
-   level only when the guest omitted it. A trap, timeout, OOM, bad ABI, fetch
-   or compile failure is a fatal result.
+9. **Return** the guest's response, with `meta` added only when the guest
+   omitted it. A trap, timeout, OOM, bad ABI, fetch or compile failure is a
+   fatal result.
 
 ## Layout
 
@@ -92,12 +93,10 @@ on the raw request bytes. `docs/how-a-request-runs.md` is the reader's version.
 crates/function/          runtime library (guestfn-runtime), generic over E: Engine; no engine
                           outside dev-dependencies and the testutil feature
   src/cli.rs                serve (default) and validate behind cli::run; every ceiling flag
-  src/runner.rs             handle_raw, the steps above; fatal() logs and counts requests_total
-  src/grpc.rs               the raw-codec gRPC transport, mTLS, reflection, gRPC health
+  src/runner.rs             handle, the steps above; fatal() logs and counts requests_total
+  src/grpc.rs               the gRPC transport over the SDK's generated service, mTLS,
+                            reflection, gRPC health
   src/grpcmetrics.rs        function-sdk-go's grpc_server_* series as a tower layer
-  src/partial.rs            the partial decode, held to prost by a differential test
-  src/protowire.rs          wire-level edits: retain_credentials, replace_input_config,
-                            append_meta, noop_response
   src/admission.rs          admit, admit_requires, admit_require, admit_compose (validate's too)
   src/authz.rs              the Cedar PDP: CompositionPolicy, OperatorPolicy, the decision memo
   src/require.rs, compose.rs  the read fence's selectors, the output fence's diff (pure)
@@ -113,13 +112,15 @@ crates/function/          runtime library (guestfn-runtime), generic over E: Eng
   src/crd.rs                generates the Input CRD under package/*/input/
   src/logging.rs, ops.rs    --debug and RUST_LOG; /livez, /readyz, /metrics, warm()
   src/testing.rs, testsigstore.rs  test stand-ins (feature testutil)
-  tests/                    guests.rs (guest suite), raw_client.rs (byte transparency), crd.rs
+  tests/                    guests.rs (guest suite), raw_client.rs (unknown fields over the
+                            wire), crd.rs
   testdata/                 validate/ (fixture corpus), conformance/ (goldens)
 crates/function-wasm/     function-wasm's main; tests/conformance.rs, tests/logging.rs
 crates/function-oci/      function-oci's main, with the OCI engine's flags
 crates/engine/            the Engine trait, ArtifactStore, Config, RunOptions, RunError (the run
                           metric reads its RunFailure kind, never the words), HttpRequester,
-                          slots and memory pool, metrics.rs, RawCodec. No WebAssembly
+                          slots and memory pool, metrics.rs, RawCodec (the OCI engine's
+                          client). No WebAssembly
 crates/engine-wasm/       the Wasmtime engine: wasm.rs (compile, ABI check, inspect), run.rs,
                           component.rs (world host, typecheck), wasihttp.rs, componentize.rs
                           (guestfn build's wrap, embed_world), testing.rs (WAT fixtures)
@@ -148,13 +149,15 @@ crates/function-{wasm,oci}/Dockerfile[.dev]  the release image; the same around 
 
 ## Rules
 
-- **The transparent proxy is wire-level.** prost drops fields it doesn't know,
-  so the gRPC layer passes raw bytes (a pass-through codec), admission decodes
-  a partial typed copy, and the guest receives the caller's exact bytes with
-  only the step credentials it wasn't granted edited out (`protowire.rs`). The
-  response travels back untouched. Fields newer than the vendored proto survive
-  both ways, which `crates/function/tests/raw_client.rs` proves. Never route the
-  forwarded payload through prost structs.
+- **The proxy keeps every field.** The request and the response cross the
+  runtime as function-sdk-rust's messages, which since 0.6.0 keep the fields
+  they don't know on every message of the function API. The guest receives the
+  caller's request without the step credentials it wasn't granted and with the
+  Input's `config` resolved, and the response goes back with `meta` added when
+  the guest omitted it. Fields newer than the vendored proto survive both ways,
+  which `crates/function/tests/raw_client.rs` proves. The byte layout isn't
+  kept. Never route the forwarded payload through a message that drops unknown
+  fields, as a struct with prost's `Message` derive does.
 - **The goldens are the contract.** `crates/function-wasm/tests/conformance.rs`
   runs `function validate` over the fixture corpus and compares stdout, stderr
   and exit codes against `crates/function/testdata/conformance/`. Re-record only
@@ -590,13 +593,14 @@ One line each; the record named holds the reasoning.
 
 - Rust host for ABI v2 on the component model (Jonasz, 2026-08-25):
   `docs/one-pager-abi-v2.md`.
-- The proxy is wire-level (2026-08-25): typed round-trips with prompt proto
-  bumps can't fix a guest built on a newer proto than the runtime, and that
-  failure is silent. A module sees only the step credentials it was granted
-  (2026-10).
-- The gRPC transport is about 50 owned lines in `grpc.rs`, not an SDK
-  abstraction (Jonasz, 2026-08-26): it has one caller, and owning it lets
-  warm-up flip gRPC health.
+- The proxy forwards function-sdk-rust's messages (Jonasz, 2026-11-19): since
+  0.6.0 they keep unknown fields on every message. It was wire-level from
+  2026-08-25, because a prost round-trip silently dropped the fields of a guest
+  built on a newer proto than the runtime. A module sees only the step
+  credentials it was granted (2026-10).
+- The gRPC server is assembled in `grpc.rs`, not by the SDK's `Server`
+  (Jonasz, 2026-08-26): it has one caller, and owning it lets warm-up flip
+  gRPC health while requests are already served.
 - Wasmtime is the only reader of a WebAssembly module (Jonasz, 2026-08-17):
   no second decoder, so every verdict `guestfn` or `validate` prints is the
   runtime's.
@@ -652,8 +656,8 @@ One line each; the record named holds the reasoning.
   wasmtime group.
 - `backhand` (zstd): function-oci's graph only. `cargo tree -p function-wasm -i
   zstd-sys` and the same for `guestfn` must find nothing.
-- `function-sdk-rust`: prost types and helpers; serving goes through the raw
-  codec.
+- `function-sdk-rust`: the messages, which keep unknown fields, the generated
+  service and the helpers.
 - `cedar-policy`: both policy layers, `authz.rs` only.
 - `sigstore-verify`, `sigstore-trust-root`, `sigstore-types`, `sigstore-tuf`:
   keyless verification and TUF. The `sigstore` crate isn't used.

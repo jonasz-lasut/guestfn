@@ -2,7 +2,7 @@
 
 * Owner: @jonasz-lasut (Jonasz Małecki)
 * Reviewers: function-wasm maintainers
-* Status: implemented, revision 1.12 (revision 1.12 holds a redirected HTTP download to the default block list, and 1.11 keeps the signature verdict per repository and digest; rewritten in the present tense over the Rust workspace; keyless signatures (#116) and the trusted root over TUF (#183) folded into the body as the design)
+* Status: implemented, revision 1.13 (revision 1.13 forwards the request and the response as function-sdk-rust's messages, which keep the fields they don't know, where the proxy edited raw bytes, 1.12 holds a redirected HTTP download to the default block list, and 1.11 keeps the signature verdict per repository and digest; rewritten in the present tense over the Rust workspace; keyless signatures (#116) and the trusted root over TUF (#183) folded into the body as the design)
 
 Who decides what code runs, what that code can see and reach, and what the
 runtime guarantees to each of them. The 2026-08-16 review found two ways an
@@ -190,8 +190,9 @@ the guest receives only those granted to it: each one its manifest names (a
 `requires.env` binding's credential, or one it reads whole through
 `requires.credentials`) and both Cedar layers permit (`spendCredential`: the
 composition layer's scoped default-permit and the operator's default-deny).
-The runtime edits every other one out of the forwarded request at the wire
-level. `crates/function/src/protowire.rs` drops only those map entries, so
+The runtime leaves every other one out of the request it forwards. It
+forwards the request as function-sdk-rust's message, which keeps the fields
+it doesn't know on every message of the function API, so
 fields newer than the vendored proto still arrive at the guest. A module with
 no manifest, or one that doesn't require a credential, sees none. A
 credential the manifest requires that the step doesn't declare is a fatal
@@ -228,7 +229,7 @@ the policy layers from the Input and the operator's file only, so an XR
 author can't widen them.
 
 Everything the module produces leaves in the response, which the host
-forwards verbatim, adding `meta` when the guest omitted it. A trap, exit,
+forwards whole, adding `meta` when the guest omitted it. A trap, exit,
 timeout, memory exhaustion, bad ABI or host-side panic on its request is a
 fatal result, never a crashed process, so one module can't take the runtime
 down for the Compositions sharing it (the bounds are in the

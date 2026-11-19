@@ -2,7 +2,8 @@
 
 * Owner: @jonasz-lasut (Jonasz Małecki)
 * Reviewers: function-wasm maintainers
-* Status: implemented, revision 0.9 (rewritten in the present tense over the
+* Status: implemented, revision 0.10 (revision 0.10 serves the SDK's
+  generated service, where the gRPC layer was a raw-codec transport. Rewritten in the present tense over the
   Rust workspace. The Rust host has served since v0.3.0, the world froze on
   2026-10-07, took the name `guestfn:function@1.0.0` and a sync form on
   2026-11-10, and ABI v1 was removed in 1.0.0;
@@ -99,8 +100,10 @@ deliberate re-record.
   and the repository hierarchy. Their tests ported with them, and the
   fixtures diff the refusal strings.
 - function-sdk-rust maturity: the runtime became its first hard consumer.
-  The gRPC layer ended up a raw-codec transport the runtime owns
-  (`crates/function/src/grpc.rs`), with the SDK supplying types and helpers.
+  The runtime assembles its own gRPC server
+  (`crates/function/src/grpc.rs`) over the SDK's generated service, with the
+  SDK supplying the messages and helpers. The server used a raw codec
+  until function-sdk-rust 0.6.0 kept unknown fields on every message.
 - Registry and signing clients. The registry client is hand-written over
   `reqwest` (`crates/function/src/oci.rs`) rather than a published OCI crate.
   Signature checking moved to cosign 3 bundles over `sigstore-verify`, so

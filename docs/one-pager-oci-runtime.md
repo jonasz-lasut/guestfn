@@ -121,8 +121,8 @@ runtime calls `RunFunction` once that port accepts a connection:
 
 | part | content |
 |---|---|
-| the request | the raw `RunFunctionRequest` bytes the proxy forwards, as the component's `run` receives them, through a pass-through codec |
-| the response | the raw `RunFunctionResponse` bytes. The proxy returns them verbatim and appends `meta` at the wire level when the guest omitted it, as today |
+| the request | the `RunFunctionRequest` the proxy forwards, encoded, as the component's `run` receives it. The engine sends those bytes through a pass-through codec |
+| the response | the `RunFunctionResponse` bytes, which the proxy decodes. It adds `meta` when the guest omitted it, as today |
 | a status other than OK | `module <desc> failed: run returned an error: <message> (gRPC status <code>)`, a fatal result on a fresh response, as a component's `err(string)` is |
 | standard output and standard error | log lines. A line that parses as a JSON object with `level` and `msg` becomes a typed log line with its other keys as fields. Every other line logs at info. `module` and `digest` attach as they do for the typed `log` import |
 | the process ending before it answers | `module <desc> failed: process exited with status <n> before answering the call: <the last log line>` |
@@ -355,9 +355,9 @@ authority under `--enable-vm-snapshots` and the wire between the init and the
 host.
 
 **Credentials and env.** `requires.env` bindings become process environment
-through the init. `requires.credentials` entries travel in the request
-bytes, and `protowire::retain_credentials` withholds every other step
-credential before the runtime sends the bytes to the VM, unchanged. The
+through the init. `requires.credentials` entries travel in the request,
+and the runtime withholds every other step credential before it encodes
+the request and sends the bytes to the VM. The
 runtime withholds the pull credential from the VM as it does from a
 component.
 

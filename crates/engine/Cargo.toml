@@ -8,8 +8,7 @@ description = "What the engines of guestfn share: the Engine trait the runtime h
 publish = false
 
 [dependencies]
-# The pass-through gRPC codec, shared by the runtime's server and the OCI
-# engine's client.
+# The pass-through gRPC codec of the OCI engine's client.
 bytes = "1"
 tonic = "0.14"
 # The writing half of the OCI image layout, shared by the runtime's resolver

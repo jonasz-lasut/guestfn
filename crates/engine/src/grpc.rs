@@ -1,7 +1,8 @@
-//! The pass-through gRPC codec: messages as their raw bytes. prost drops
-//! fields it doesn't know, so what crosses the runtime is never decoded on
-//! the way through, whether the runtime is serving Crossplane
-//! (`crates/function/src/grpc.rs`) or calling an OCI module's server.
+//! The pass-through gRPC codec: messages as their raw bytes. An engine
+//! runs a module on the request's encoded bytes, and the OCI engine's
+//! module is a gRPC server, so its client sends those bytes as they are
+//! and hands the response's back, without a decode of its own between the
+//! runtime's.
 
 use bytes::{Buf as _, BufMut as _, Bytes};
 use tonic::Status;

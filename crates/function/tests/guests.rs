@@ -602,11 +602,7 @@ fn run_guest(guest: &str) {
             }),
             ..Default::default()
         };
-        use prost::Message as _;
-        let out = runtime
-            .block_on(f.handle_raw(req.encode_to_vec(), None))
-            .expect("handle_raw");
-        let mut rsp = RunFunctionResponse::decode(out.as_slice()).expect("decode");
+        let mut rsp = runtime.block_on(f.handle(req, None));
         // Fatal messages are worded per guest; only their presence is
         // asserted.
         if want

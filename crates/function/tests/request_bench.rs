@@ -1,11 +1,13 @@
-//! A hand-run benchmark of the host's side of a warm request: handle_raw
-//! in process, with an empty guest and with the end-to-end suite's committed
-//! guest, over requests carrying 0, 5, 10, 100 and 1000 composed resources
-//! of about 3 KB each in both the observed and the desired state (5 to 10
-//! is what a composition usually holds; 100 and 1000 are stress sizes).
-//! Beside each end-to-end figure it times the stages on their own - the
-//! request's check and partial decode (and the whole decode they stand in
-//! for), admission, the capability decision, the run, the response's, the
+//! A hand-run benchmark of the host's side of a warm request, wire to
+//! wire as the served path runs it: the request's bytes decoded,
+//! WasmFunction::handle, the response encoded. In process, with an empty
+//! guest and with the end-to-end suite's committed guest, over requests
+//! carrying 0, 5, 10, 100 and 1000 composed resources of about 3 KB each
+//! in both the observed and the desired state (5 to 10 is what a
+//! composition usually holds; 100 and 1000 are stress sizes). Beside each
+//! wire-to-wire figure it times the stages on their own - the request's
+//! decode and the encode of what the module is forwarded, admission, the
+//! capability decision, the run, the response's decode and encode, the
 //! fences - so a change to one of them can be read against what it costs.
 //! Not part of the suite:
 //!
@@ -28,7 +30,7 @@ use guestfn_runtime::input::Input;
 use guestfn_runtime::manifest::Manifest;
 use guestfn_runtime::runner::WasmFunction;
 use guestfn_runtime::testing::{registry::Registry, runtime};
-use guestfn_runtime::{admission, compose, from, partial};
+use guestfn_runtime::{admission, compose, from};
 use prost::Message;
 
 const E2E_GUEST: &[u8] = include_bytes!("../../e2e/guest/fn.wasm");
@@ -300,19 +302,25 @@ fn iterations(n: usize) -> usize {
     }
 }
 
+/// One request as the served path runs it: the codec's decode, the
+/// handler, the codec's encode.
+async fn wire_to_wire(f: &WasmFunction<Wasmtime>, raw: &[u8]) -> Vec<u8> {
+    let req = RunFunctionRequest::decode(raw).expect("a request");
+    f.handle(req, None).await.encode_to_vec()
+}
+
 async fn end_to_end(f: &WasmFunction<Wasmtime>, raw: &[u8], iters: usize) -> (Samples, Vec<u8>) {
     let mut last = Vec::new();
     for _ in 0..(iters / 10).max(3) {
-        last = f.handle_raw(raw.to_vec(), None).await.expect("a response");
+        last = wire_to_wire(f, raw).await;
     }
     let rsp = RunFunctionResponse::decode(last.as_slice()).expect("a response");
     let fatal: Vec<_> = rsp.results.iter().filter(|r| r.severity == 1).collect();
     assert!(fatal.is_empty(), "a fatal result: {fatal:?}");
     let mut s = Vec::with_capacity(iters);
     for _ in 0..iters {
-        let bytes = raw.to_vec();
         let t = Instant::now();
-        let out = f.handle_raw(bytes, None).await.expect("a response");
+        let out = wire_to_wire(f, raw).await;
         s.push(t.elapsed());
         std::hint::black_box(out);
     }
@@ -320,9 +328,7 @@ async fn end_to_end(f: &WasmFunction<Wasmtime>, raw: &[u8], iters: usize) -> (Sa
     (Samples(s), last)
 }
 
-/// The stages of one request on their own, as handle_raw runs them, and
-/// the whole decodes it keeps for a fatal result, for a fenced response and
-/// for bytes the wire check will not vouch for.
+/// The stages of one request on their own, as the served path runs them.
 fn stages(
     raw: &[u8],
     response: &[u8],
@@ -334,18 +340,16 @@ fn stages(
     Samples::of(iters, || {
         std::hint::black_box(RunFunctionRequest::decode(raw).expect("a request"));
     })
-    .print("request decode, whole (fatal path, fallback)");
-    Samples::of(iters, || {
-        assert!(partial::request_decodes(raw));
-        std::hint::black_box(partial::Request::decode(raw).expect("a request"));
-    })
-    .print("request check + partial decode");
+    .print("request decode");
 
     let req = RunFunctionRequest::decode(raw).expect("a request");
-    let partial = partial::Request::decode(raw).expect("a request");
+    Samples::of(iters, || {
+        std::hint::black_box(req.encode_to_vec());
+    })
+    .print("request encode (what the module is forwarded)");
     let config = Config::default();
     Samples::of(iters, || {
-        let input: Input = partial.input().expect("an Input");
+        let input: Input = function_sdk_rust::request::get_input(&req).expect("an Input");
         let admitted = admission::admit(&input, &config, "wasm").expect("admitted");
         let source = from::from_composite(&input.module, admitted.composition.as_deref(), None)
             .expect("a source")
@@ -394,15 +398,14 @@ fn stages(
     Samples::of(iters, || {
         std::hint::black_box(RunFunctionResponse::decode(response).expect("a response"));
     })
-    .print("response decode, whole (fenced)");
+    .print("response decode");
+    let got = RunFunctionResponse::decode(response).expect("a response");
     Samples::of(iters, || {
-        assert!(partial::response_decodes(response));
-        std::hint::black_box(partial::ResponseHead::decode(response).expect("a response"));
+        std::hint::black_box(got.encode_to_vec());
     })
-    .print("response check + meta (unfenced)");
+    .print("response encode");
 
     if admission::compose_fenced(policy, admitted.composition.as_deref()) {
-        let got = RunFunctionResponse::decode(response).expect("a response");
         Samples::of(iters, || {
             let changes = compose::changes(
                 req.desired.as_ref(),
@@ -522,9 +525,9 @@ async fn a_warm_request_by_stage() {
                 raw.len(),
                 response.len()
             );
-            total.print("handle_raw, end to end");
+            total.print("wire to wire (decode, handle, encode)");
             // The engine blocks on its own runtime, as it does under
-            // handle_raw's spawn_blocking.
+            // handle's spawn_blocking.
             tokio::task::block_in_place(|| {
                 stages(
                     &raw,

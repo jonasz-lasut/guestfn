@@ -22,8 +22,6 @@ pub mod logging;
 pub mod manifest;
 pub mod oci;
 pub mod ops;
-pub mod partial;
-pub mod protowire;
 pub mod quantity;
 pub mod require;
 pub mod resolver;

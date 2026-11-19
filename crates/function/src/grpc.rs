@@ -1,135 +1,46 @@
-//! The gRPC server over raw message bytes - what keeps the transparent
-//! proxy honest. The generated tonic service decodes into prost types,
-//! which drop protobuf fields newer than the vendored proto; this server
-//! swaps only the codec: the FunctionRunnerService path hands
-//! WasmFunction::handle_raw the caller's exact bytes and returns the
-//! guest's exact bytes, while TLS, health, reflection and shutdown mirror
-//! function-sdk-rust's serve.
+//! The gRPC server: the FunctionRunnerService tonic generates from the
+//! SDK's proto, served over WasmFunction, with TLS, health, reflection and
+//! shutdown assembled as function-sdk-rust's serve assembles them. The
+//! server is built here, not by the SDK's Server, because the runtime
+//! serves requests while warm-up still runs and reports that through the
+//! health service alone, where the SDK's holds RunFunction back until it
+//! is ready.
 
 use std::future::Future;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
-use bytes::Bytes;
+use function_sdk_rust::proto::v1::function_runner_service_server::FunctionRunnerServiceServer;
 use guestfn_engine::Engine;
-use guestfn_engine::grpc::{RUN_FUNCTION, RawCodec};
-use tonic::Status;
-use tonic::server::NamedService;
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 
 use crate::runner::WasmFunction;
 
-const SERVICE: &str = "apiextensions.fn.proto.v1.FunctionRunnerService";
+/// The served FunctionRunnerService, as the health service names it.
+pub type FunctionServer<E> = FunctionRunnerServiceServer<WasmFunction<E>>;
 
-/// The FunctionRunnerService served raw, modeled on the generated tonic
-/// server with only the codec swapped.
-pub struct RawFunctionServer<E: Engine> {
+/// The FunctionRunnerService over function: the generated server, whose
+/// codec is the SDK's messages. They keep the fields they do not know, so
+/// a field newer than the vendored proto crosses the runtime both ways.
+fn service<E: Engine>(
     function: Arc<WasmFunction<E>>,
     max_decoding_message_size: Option<usize>,
-}
-
-// By hand: a derive would ask the engine itself to be Clone.
-impl<E: Engine> Clone for RawFunctionServer<E> {
-    fn clone(&self) -> Self {
-        RawFunctionServer {
-            function: Arc::clone(&self.function),
-            max_decoding_message_size: self.max_decoding_message_size,
-        }
+) -> FunctionServer<E> {
+    let service = FunctionRunnerServiceServer::from_arc(function);
+    match max_decoding_message_size {
+        Some(size) => service.max_decoding_message_size(size),
+        None => service,
     }
 }
 
-impl<E: Engine> RawFunctionServer<E> {
-    pub fn new(function: Arc<WasmFunction<E>>, max_decoding_message_size: Option<usize>) -> Self {
-        RawFunctionServer {
-            function,
-            max_decoding_message_size,
-        }
-    }
-}
-
-impl<E: Engine> NamedService for RawFunctionServer<E> {
-    const NAME: &'static str = SERVICE;
-}
-
-impl<E, B> tonic::codegen::Service<http::Request<B>> for RawFunctionServer<E>
-where
-    E: Engine,
-    B: tonic::codegen::Body + Send + 'static,
-    B::Error: Into<tonic::codegen::StdError> + Send + 'static,
-{
-    type Response = http::Response<tonic::body::Body>;
-    type Error = std::convert::Infallible;
-    type Future = tonic::codegen::BoxFuture<Self::Response, Self::Error>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: http::Request<B>) -> Self::Future {
-        if req.uri().path() != RUN_FUNCTION {
-            return Box::pin(async move {
-                let mut response = http::Response::new(tonic::body::Body::default());
-                let headers = response.headers_mut();
-                headers.insert(
-                    Status::GRPC_STATUS,
-                    (tonic::Code::Unimplemented as i32).into(),
-                );
-                headers.insert(
-                    http::header::CONTENT_TYPE,
-                    tonic::metadata::GRPC_CONTENT_TYPE,
-                );
-                Ok(response)
-            });
-        }
-        struct RunFunctionRaw<E: Engine> {
-            function: Arc<WasmFunction<E>>,
-            deadline: Option<std::time::Instant>,
-        }
-        impl<E: Engine> tonic::server::UnaryService<Bytes> for RunFunctionRaw<E> {
-            type Response = Vec<u8>;
-            type Future = tonic::codegen::BoxFuture<tonic::Response<Vec<u8>>, Status>;
-
-            fn call(&mut self, request: tonic::Request<Bytes>) -> Self::Future {
-                let function = Arc::clone(&self.function);
-                let deadline = self.deadline;
-                Box::pin(async move {
-                    let out = function
-                        .handle_raw(request.into_inner().to_vec(), deadline)
-                        .await?;
-                    Ok(tonic::Response::new(out))
-                })
-            }
-        }
-        // The request's own deadline, read from the raw header before the
-        // codec sees the message.
-        let deadline = req
-            .headers()
-            .get("grpc-timeout")
-            .and_then(|v| v.to_str().ok())
-            .and_then(crate::runner::parse_grpc_timeout)
-            .and_then(|t| std::time::Instant::now().checked_add(t));
-        let function = Arc::clone(&self.function);
-        let max_decoding = self.max_decoding_message_size;
-        Box::pin(async move {
-            let method = RunFunctionRaw { function, deadline };
-            let mut grpc = tonic::server::Grpc::new(RawCodec)
-                .apply_max_message_size_config(max_decoding, None);
-            Ok(grpc.unary(method, req).await)
-        })
-    }
-}
-
-/// Builds the raw FunctionRunnerService server - the transport of
+/// Builds the FunctionRunnerService server - the transport of
 /// function-sdk-rust's serve (mTLS from the certs dir unless insecure, v1
 /// and v1alpha reflection, gRPC health, graceful shutdown on SIGTERM or
-/// SIGINT), assembled here from the same public pieces because only the
-/// codec differs: the SDK's generated server cannot carry the raw bytes
-/// the transparent proxy needs. Hands back the health reporter with the
-/// service NOT_SERVING next to the server future, so warm-up flips
-/// readiness when it finishes; requests are served regardless of health,
-/// and nothing listens until the future is awaited.
+/// SIGINT), assembled here from the same public pieces. Hands back the
+/// health reporter with the service NOT_SERVING next to the server future,
+/// so warm-up flips readiness when it finishes; requests are served
+/// regardless of health, and nothing listens until the future is awaited.
 pub async fn serve<E: Engine>(
     function: Arc<WasmFunction<E>>,
     args: &function_sdk_rust::Args,
@@ -196,7 +107,7 @@ async fn serve_from<E: Engine>(
             .map_err(|e| format!("cannot configure TLS: {e}"))?;
     }
 
-    let service = RawFunctionServer::new(function, args.max_recv_message_size);
+    let service = service(function, args.max_recv_message_size);
 
     let reflection_v1 = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(function_sdk_rust::proto::FILE_DESCRIPTOR_SET)
@@ -208,9 +119,7 @@ async fn serve_from<E: Engine>(
         .map_err(|e| format!("cannot build gRPC reflection service: {e}"))?;
 
     let (health_reporter, health_service) = tonic_health::server::health_reporter();
-    health_reporter
-        .set_not_serving::<RawFunctionServer<E>>()
-        .await;
+    health_reporter.set_not_serving::<FunctionServer<E>>().await;
 
     // The gRPC server metrics, pre-created at zero the way
     // grpc-prometheus's InitializeMetrics does; the layer wraps the whole
@@ -286,7 +195,10 @@ mod tests {
     use super::*;
 
     use std::pin::Pin;
+    use std::task::{Context, Poll};
     use std::time::Duration;
+
+    use bytes::Bytes;
 
     use function_sdk_rust::proto::v1::{RunFunctionRequest, RunFunctionResponse, Severity};
     use function_sdk_rust::resource;
@@ -310,13 +222,16 @@ mod tests {
         }
     }
 
-    /// Calls RunFunction on the raw service as the transport does: one
-    /// length-prefixed message in, one out, with the headers given.
-    async fn call(
-        server: &mut RawFunctionServer<guestfn_engine_wasm::Wasmtime>,
+    const RUN_FUNCTION: &str = "/apiextensions.fn.proto.v1.FunctionRunnerService/RunFunction";
+
+    /// Calls RunFunction on the service as the transport does: one
+    /// length-prefixed message in, with the headers given. Hands back the
+    /// response's headers and its body.
+    async fn respond(
+        server: &mut FunctionServer<guestfn_engine_wasm::Wasmtime>,
         headers: &[(&str, &str)],
         message: &[u8],
-    ) -> RunFunctionResponse {
+    ) -> (http::HeaderMap, Vec<u8>) {
         let mut framed = vec![0u8];
         framed.extend_from_slice(&(message.len() as u32).to_be_bytes());
         framed.extend_from_slice(message);
@@ -328,8 +243,8 @@ mod tests {
             req = req.header(*name, *value);
         }
         let req = req.body(Once(Some(framed.into()))).expect("request");
-        let rsp = server.call(req).await.expect("infallible");
-        let mut body = std::pin::pin!(rsp.into_body());
+        let (parts, body) = server.call(req).await.expect("infallible").into_parts();
+        let mut body = std::pin::pin!(body);
         let mut out = Vec::new();
         while let Some(frame) =
             std::future::poll_fn(|cx| http_body::Body::poll_frame(body.as_mut(), cx)).await
@@ -338,7 +253,64 @@ mod tests {
                 out.extend_from_slice(&data);
             }
         }
+        (parts.headers, out)
+    }
+
+    /// RunFunction's answer to message.
+    async fn call(
+        server: &mut FunctionServer<guestfn_engine_wasm::Wasmtime>,
+        headers: &[(&str, &str)],
+        message: &[u8],
+    ) -> RunFunctionResponse {
+        let (_, out) = respond(server, headers, message).await;
         RunFunctionResponse::decode(&out[5..]).expect("a RunFunctionResponse")
+    }
+
+    /// A request the message cannot decode is a gRPC error, INTERNAL in
+    /// prost's words, wherever the fault is: nothing runs and no module
+    /// sees it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_request_that_does_not_decode_is_a_grpc_error() {
+        let function = runtime::builder().build();
+        let mut server = service(Arc::new(function), None);
+        // An observed composed resource whose field name is no UTF-8, six
+        // messages deep, and a context that announces more bytes than
+        // follow.
+        let field =
+            |number: u8, value: &[u8]| [&[number << 3 | 2, value.len() as u8], value].concat();
+        let entry = [field(1, &[0xff, 0xfe]), field(2, &[])].concat();
+        let composed = [field(1, b"bucket"), field(2, &field(1, &field(1, &entry)))].concat();
+        for message in [field(2, &field(2, &composed)), vec![0x2a, 0x7f, 0x01]] {
+            let want = RunFunctionRequest::decode(message.as_slice()).expect_err("refused");
+            let (headers, _) = respond(&mut server, &[], &message).await;
+            assert_eq!(
+                headers.get("grpc-status").and_then(|v| v.to_str().ok()),
+                Some("13"),
+                "INTERNAL"
+            );
+            let said = headers
+                .get("grpc-message")
+                .and_then(|v| v.to_str().ok())
+                .map(percent_decoded)
+                .unwrap_or_default();
+            assert_eq!(said, want.to_string());
+        }
+    }
+
+    /// A grpc-message header's value: percent-encoded UTF-8.
+    fn percent_decoded(v: &str) -> String {
+        let mut out = Vec::new();
+        let mut bytes = v.bytes();
+        while let Some(b) = bytes.next() {
+            if b == b'%' {
+                let hex: Vec<u8> = bytes.by_ref().take(2).collect();
+                let hex = std::str::from_utf8(&hex).expect("hex");
+                out.push(u8::from_str_radix(hex, 16).expect("hex"));
+            } else {
+                out.push(b);
+            }
+        }
+        String::from_utf8(out).expect("UTF-8")
     }
 
     /// The request's grpc-timeout header is the run's deadline: a guest
@@ -354,7 +326,7 @@ mod tests {
         )
         .expect("write");
         let function = runtime::builder().module_dir(dir.path()).build();
-        let mut server = RawFunctionServer::new(Arc::new(function), None);
+        let mut server = service(Arc::new(function), None);
         let message = RunFunctionRequest {
             input: Some(resource::json_to_struct(
                 serde_json::json!({

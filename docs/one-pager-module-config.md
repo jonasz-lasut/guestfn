@@ -2,7 +2,7 @@
 
 * Owner: @jonasz-lasut (Jonasz Małecki)
 * Reviewers: function-wasm maintainers
-* Status: implemented, revision 1.0 (phases 2 to 4, #262; the open questions settled: objects alone, `guestfn scaffold xrd` later)
+* Status: implemented, revision 1.1 (revision 1.1 makes the `config` edit on function-sdk-rust's message, where 1.0 made it on the request's raw bytes; phases 2 to 4, #262; the open questions settled: objects alone, `guestfn scaffold xrd` later)
 
 The Input's `config` block is today a value the Composition author writes
 and the runtime forwards to the module verbatim, checked against the module
@@ -114,15 +114,15 @@ module without a schema accepts any object. An unset field under
 `allowEmpty` skips the check, as an absent `config` does today.
 
 The module receives the configuration where every guest already reads it:
-`input.config` of its request. The forwarded request is the caller's raw
-bytes with wire-level edits (`protowire.rs`), and this is one more. Before
+`input.config` of its request. The forwarded request is the caller's with
+the edits the runtime may make (`runner.rs`), and this is one more. Before
 it forwards the request, the runtime replaces the `config` entry of the
 Input's Struct, where the caller wrote `{from: …}`, with the resolved
 value. The Input is the one field of the request whose schema is the
-runtime's own, and since `google.protobuf.Struct` is a map, re-encoding it
+runtime's own, and since `google.protobuf.Struct` is a map, the edit
 keeps every key the caller wrote, known or not. The rest of the request,
-the observed composite resource included, passes unchanged, and the proxy
-remains wire-level everywhere else. Under `allowEmpty` with an unset field, the
+the observed composite resource included, passes with every field it had.
+Under `allowEmpty` with an unset field, the
 runtime removes the `config` entry, so `GetConfig` reports an unconfigured
 module rather than a `from` reference.
 
@@ -196,8 +196,8 @@ write.
 1. This record.
 2. The runtime: `input.rs` (`Config { from, allow_empty }`, the CRD
    regenerated), `from.rs` reads the field, `admission::admit` applies the
-   rules, `protowire.rs` replaces the Input's `config` entry, `runner.rs`
-   and `validate.rs` share the steps, fixtures under `testdata/validate/`
+   rules, `runner.rs` replaces the Input's `config` entry and shares the
+   steps with `validate.rs`, fixtures under `testdata/validate/`
    and conformance goldens for every sentence, the Input reference, the
    guests' page and troubleshooting updated.
 3. `guestfn scaffold composition`'s step and fragment, `guestfn scaffold
@@ -206,7 +206,7 @@ write.
 4. The use-case examples (`function-wasm-python`'s `cmdbUrl`, the hello guests'
    greeting) moved to their composite resources and definitions.
 5. The OCI runtime, after its code merges: the same `config` object,
-   delivered through the same wire-level edit in the request the runtime passes
+   delivered through the same edit in the request the runtime passes
    to its gRPC server.
 
 ## Alternatives
