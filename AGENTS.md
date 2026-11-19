@@ -378,6 +378,8 @@ fixtures, `guestfn_runtime::testing` for the in-memory registry,
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+git ls-files '*.sh' | xargs shellcheck    # the scripts under hack/ and examples/
+actionlint                                # the workflows, each run: block through shellcheck (.github/actionlint.yaml)
 make -C examples/<name> lint              # each example's own lint (golangci-lint, zig fmt, moon fmt, ...)
 make vale                                 # hack/design-records.sh, then Vale over docs/, README.md, SECURITY.md, package/*/README.md
 ```
@@ -508,7 +510,8 @@ in the render files move at release time (`/cut-release`).
 
 - The `default branch` ruleset requires a pull request and the checks
   `e2e-gate`, `lint`, `unit-test`, `deny`, `guest-suite` and `vm-suite`.
-- `ci.yml`: `lint` (`--all-features`, plus `hack/check-generated-test.sh`),
+- `ci.yml`: `lint` (`--all-features`, plus `hack/check-generated-test.sh`,
+  `shellcheck` over the scripts and `actionlint` over the workflows),
   `unit-test`, `deny` (`cargo deny` over `Cargo.lock` against `deny.toml`),
   `guest-suite` (`GUESTFN_REQUIRE_TOOLCHAINS=1`) and `vm-suite` (real VMs; on a
   pull request only when the OCI crates, `crates/engine`, the dependencies or

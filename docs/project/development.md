@@ -12,11 +12,15 @@ top-level, package and example Markdown files, `.claude/` and `extensions/`.
 cargo build --workspace && cargo test --workspace
 cargo fmt --all --check && cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo deny check advisories bans licenses sources   # cargo install cargo-deny --locked
+git ls-files '*.sh' | xargs shellcheck && actionlint   # both on your PATH
 ```
 
 The tests include the conformance goldens and the scaffold goldens. The
 `cargo deny` run checks `Cargo.lock` against `deny.toml`: every crate is
-free of published advisories, under an allowed license and from crates.io. A pull request that touches the documentation (`docs/`, `README.md`, `SECURITY.md` or `book.toml`) also runs Vale, after a check that the design records index and `docs/SUMMARY.md` restate the status line of each one-pager:
+free of published advisories, under an allowed license and from crates.io.
+The last line lints the shell scripts and the workflows. `actionlint` also
+passes each `run:` block of a workflow through `shellcheck`, and
+`.github/actionlint.yaml` is its configuration. A pull request that touches the documentation (`docs/`, `README.md`, `SECURITY.md` or `book.toml`) also runs Vale, after a check that the design records index and `docs/SUMMARY.md` restate the status line of each one-pager:
 
 ```shell
 make vale

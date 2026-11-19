@@ -1,0 +1,10 @@
+# The configuration of actionlint, which the lint job of ci.yml runs over
+# the workflows.
+#
+# The labels of GitHub's hosted Ubuntu 26.04 runners. actionlint 1.7.12 does
+# not list them and takes an unknown label for a mistake unless it is named
+# here. Remove them once a release knows them.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm
