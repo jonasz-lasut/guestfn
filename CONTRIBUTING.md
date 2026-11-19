@@ -69,7 +69,7 @@ The `main` branch accepts a pull request once these checks pass:
 
 | check | what it runs |
 |---|---|
-| `lint` | `cargo fmt`, `cargo clippy` with every feature, the drift check's own test |
+| `lint` | `cargo fmt`, `cargo clippy` with every feature, the drift check's own test, `shellcheck` over the scripts, `actionlint` over the workflows |
 | `unit-test` | `cargo test --workspace`, without the guest builds |
 | `deny` | `cargo deny` over `Cargo.lock` |
 | `guest-suite` | every scaffold built and run through the host, with every toolchain required |

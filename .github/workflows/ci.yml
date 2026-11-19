@@ -101,11 +101,37 @@ jobs:
     timeout-minutes: 20
     needs: detect-noop
     if: needs.detect-noop.outputs.noop != 'true'
+    env:
+      # actionlint, installed from the release tarball and checked against
+      # its digest; Renovate moves both lines together.
+      # renovate: release-asset depName=rhysd/actionlint
+      ACTIONLINT_VERSION: v1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Every tracked shell script, with the shellcheck of the runner image
+      # (Ubuntu's package). Any finding fails, a note included.
+      - name: Lint the Shell Scripts
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck
+
+      # The workflows: their syntax, their expressions and the inputs of the
+      # actions they call, and every `run:` block through the same
+      # shellcheck. .github/actionlint.yaml names the runner labels this
+      # actionlint release does not know.
+      - name: Install actionlint
+        run: |
+          curl -fsSL -o "${RUNNER_TEMP}/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION#v}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${RUNNER_TEMP}/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/actionlint.tar.gz" -C "${RUNNER_TEMP}" actionlint
+
+      - name: Lint the Workflows
+        run: |
+          "${RUNNER_TEMP}/actionlint"
 
       # The drift check of the checked-in generated code, which the example
       # build jobs of e2e-wasm.yml run after regenerating: here against a

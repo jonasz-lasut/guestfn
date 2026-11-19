@@ -90,7 +90,7 @@ wait_for 9443 || { echo "runtime did not start:" >&2; cat "$work/function.log" >
 
 args=()
 for input in required-resources observed-resources function-credentials; do
-  [[ -f "$example/$input.yaml" ]] && args+=(--"$input"="$example/$input.yaml")
+  [[ -f "$example/$input.yaml" ]] && args+=("--$input=$example/$input.yaml")
 done
 echo "==> crossplane composition render" >&2
 (cd "$here" && crossplane composition render example/xr.yaml example/composition.yaml example/functions.yaml \

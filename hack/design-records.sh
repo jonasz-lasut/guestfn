@@ -82,9 +82,9 @@ for record in docs/one-pager-*.md; do
 done
 
 # A row or an entry left behind by a record that was renamed or removed.
-for linked in $(grep -oh 'one-pager-[A-Za-z0-9-]*\.md' "$index" "$contents" | sort -u); do
+while IFS= read -r linked; do
 	[ -f "docs/$linked" ] || drift "$index or $contents links $linked, which does not exist under docs/"
-done
+done < <(grep -oh 'one-pager-[A-Za-z0-9-]*\.md' "$index" "$contents" | sort -u)
 
 if [ "$failed" -ne 0 ]; then
 	exit 1
