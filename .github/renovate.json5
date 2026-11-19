@@ -155,7 +155,7 @@
       description: 'the tool versions a `# renovate:` comment annotates in the workflows and the Makefile',
       managerFilePatterns: ['/^\\.github/workflows/[^/]+\\.ya?ml$/', '/^Makefile$/'],
       matchStrings: [
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?: versioning=(?<versioning>[^\\s]+))?(?: extractVersion=(?<extractVersion>[^\\s]+))?\\s+(?:PROTOC_VERSION|NANOPB_VERSION|WIT_BINDGEN_VERSION|PROVIDER_NOP_VERSION|lycheeVersion|version) ?(?::=|\\?=|:) ?'?(?<currentValue>[^'\\s]+)'?",
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?: versioning=(?<versioning>[^\\s]+))?(?: extractVersion=(?<extractVersion>[^\\s]+))?\\s+(?:PROTOC_VERSION|NANOPB_VERSION|RENOVATE_VERSION|WIT_BINDGEN_VERSION|PROVIDER_NOP_VERSION|lycheeVersion|version) ?(?::=|\\?=|:) ?'?(?<currentValue>[^'\\s]+)'?",
         '# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?: versioning=(?<versioning>[^\\s]+))?\\s+run: pip install [a-z]+==(?<currentValue>[^\\s]+)',
       ],
     },
@@ -472,6 +472,15 @@
     // The build submodule follows crossplane/build's main branch, which
     // moves often: one pull request a month, with the examples batch.
     { matchManagers: ['git-submodules'], schedule: ['* 0-3 1 * *'] },
+    // The validator of this file (renovate-config.yml) is Renovate itself,
+    // which releases several times a day: one pull request a month.
+    {
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['npm'],
+      matchPackageNames: ['renovate'],
+      minimumReleaseAge: '3 days',
+      schedule: ['* 0-3 1 * *'],
+    },
     // Vale and its style packages: the binary's pin in the Makefile and the
     // package URLs in .vale.ini move in one PR, which the docs workflow's
     // prose job checks against the whole book.
