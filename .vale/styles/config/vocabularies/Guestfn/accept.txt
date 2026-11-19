@@ -1,6 +1,7 @@
 (?i)jonasz
 ABI
 ABIs
+agent
 AssemblyScript
 authorable
 authorizer

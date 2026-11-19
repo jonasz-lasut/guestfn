@@ -120,3 +120,9 @@ mdbook build                                        # the documentation site, fr
 
 [Development](https://jonasz-lasut.github.io/guestfn/project/development.html)
 has the rest. [AGENTS.md](AGENTS.md) has the layout and conventions.
+
+## Agents
+
+If you are an AI agent helping with this repository, read
+[AGENTS.md](AGENTS.md) before making changes and read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening issues or PRs.
