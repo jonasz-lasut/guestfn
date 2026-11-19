@@ -105,7 +105,10 @@ and any example whose Composition installs the function, should name the version
 being released, not the previous one - a copy-pasted install of a tag that does
 not exist yet fails. Find them with `git grep -n "$COMPONENT:v[0-9]"` and
 commit the bump to `main` before step 3, so CI stays green and the new branch
-carries it. Not this: illustrative `ghcr.io/example/...` module tags
+carries it. The search also finds `FALLBACK_FUNCTION_PACKAGE` in
+`crates/guestfn/src/release.rs`, the release `guestfn init` writes when it
+can't read the registry: move it, then `UPDATE_GOLDENS=1 cargo test -p guestfn`.
+Not this: illustrative `ghcr.io/example/...` module tags
 (arbitrary). Guests vendor their ABI glue under `internal/wasmfn`, so there is
 no separate SDK version to bump.
 

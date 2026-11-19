@@ -542,7 +542,8 @@ fn init_names_a_component_project_after_its_directory() {
     ];
     for (lang, name, kind, manifest) in cases {
         let dir = tempfile::tempdir().expect("tempdir");
-        let (stdout, stderr, ok) = guestfn(dir.path(), &["init", name, "--lang", lang]);
+        let (stdout, stderr, ok) =
+            guestfn(dir.path(), &["init", name, "--lang", lang, "--offline"]);
         assert!(ok, "{lang}: init failed: {stderr}");
         assert!(
             stdout.contains(&format!("Created {name} ({kind} {name})")),
@@ -563,6 +564,144 @@ fn init_names_a_component_project_after_its_directory() {
             "{lang}: missing wit/world.wit"
         );
     }
+}
+
+fn init_ts(dir: &Path, extra: &[&str]) -> (String, String, String) {
+    let mut args = vec!["init", "my-fn", "--lang", "ts"];
+    args.extend_from_slice(extra);
+    let (stdout, stderr, ok) = guestfn(dir, &args);
+    assert!(ok, "init failed: {stderr}");
+    let functions = read(&dir.join("my-fn"), "example/functions.yaml");
+    (stdout, stderr, functions)
+}
+
+fn function_releases(tags: &[&str]) -> String {
+    let mut registry = Registry::new();
+    let digest = registry.manifest(b"{}");
+    for tag in tags {
+        registry.tag(tag, &digest);
+    }
+    format!("{}/jonasz-lasut/function-wasm", registry.serve())
+}
+
+#[test]
+fn init_references_the_newest_release_of_the_major() {
+    let repository = function_releases(&[
+        "v1.0.0",
+        "v1.0.2",
+        "v1.3.0",
+        "v1.4.0-rc.1",
+        "sha256-0fb4a7a5",
+        "v2.0.0",
+    ]);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (stdout, _, functions) = init_ts(dir.path(), &["--repository", &repository]);
+    assert!(
+        functions.contains(&format!("  package: {repository}:v1.3.0\n")),
+        "{functions}"
+    );
+    assert!(
+        stdout.contains(&format!(
+            "example/functions.yaml references {repository}:v1.3.0, the newest 1.x release at {repository}\nv2.0.0 is published: a new major, which --function-version v2.0.0 writes"
+        )),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn init_never_references_a_release_older_than_its_own() {
+    let repository = function_releases(&["v1.0.0"]);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_, _, functions) = init_ts(dir.path(), &["--repository", &repository]);
+    assert!(
+        functions.contains(&format!("  package: {repository}:v1.0.2\n")),
+        "{functions}"
+    );
+}
+
+#[test]
+fn init_falls_back_to_its_own_release_and_says_why() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let repository = "127.0.0.1:1/jonasz-lasut/function-wasm";
+    let (_, stderr, functions) = init_ts(dir.path(), &["--repository", repository]);
+    assert!(
+        functions.contains(&format!("  package: {repository}:v1.0.2\n")),
+        "{functions}"
+    );
+    assert!(
+        stderr.contains(&format!(
+            "example/functions.yaml references {repository}:v1.0.2, the release this guestfn was built with: cannot list the releases at {repository}: "
+        )),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("; --function-version states another"),
+        "{stderr}"
+    );
+}
+
+/// A repository that needs a credential is read with the Docker keychain's,
+/// as guestfn wit update and guestfn push read theirs.
+#[test]
+fn init_reads_a_private_repository_with_the_keychain() {
+    use guestfn_runtime::oci::testregistry::{BASIC_PASSWORD, BASIC_USER};
+
+    let mut registry = Registry::new().basic();
+    let digest = registry.manifest(b"{}");
+    registry.tag("v1.3.0", &digest);
+    let host = registry.serve();
+    let repository = format!("{host}/mirror/function-wasm");
+    let keychain = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        keychain.path().join("config.json"),
+        serde_json::json!({
+            "auths": { &host: { "username": BASIC_USER, "password": BASIC_PASSWORD } }
+        })
+        .to_string(),
+    )
+    .expect("write the keychain");
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let out = Command::new(env!("CARGO_BIN_EXE_guestfn"))
+        .args(["init", "my-fn", "--lang", "ts", "--repository", &repository])
+        .current_dir(dir.path())
+        .env("DOCKER_CONFIG", keychain.path())
+        .output()
+        .expect("run guestfn");
+    assert!(out.status.success());
+    let functions = read(&dir.path().join("my-fn"), "example/functions.yaml");
+    assert!(
+        functions.contains(&format!("  package: {repository}:v1.3.0\n")),
+        "{functions}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn init_looks_nothing_up_offline_or_for_a_stated_version() {
+    let repository = function_releases(&["v1.3.0"]);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_, stderr, functions) = init_ts(dir.path(), &["--repository", &repository, "--offline"]);
+    assert!(
+        functions.contains(&format!("  package: {repository}:v1.0.2\n")),
+        "{functions}"
+    );
+    assert!(
+        stderr.contains("the release this guestfn was built with: --offline;"),
+        "{stderr}"
+    );
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (stdout, stderr, functions) = init_ts(
+        dir.path(),
+        &["--repository", &repository, "--function-version", "1.1.0"],
+    );
+    assert!(
+        functions.contains(&format!("  package: {repository}:v1.1.0\n")),
+        "{functions}"
+    );
+    assert!(!stdout.contains("references"), "{stdout}");
+    assert!(!stderr.contains("references"), "{stderr}");
 }
 
 #[test]

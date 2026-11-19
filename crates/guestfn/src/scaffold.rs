@@ -46,6 +46,8 @@ pub struct Options {
     /// caller is expected to run go get, which is what guestfn init does
     /// unless asked to stay offline.
     pub requires: bool,
+    /// The function package example/functions.yaml references, tag included.
+    pub function_package: String,
 }
 
 /// Renders the files of the scaffold keyed by their path relative to the
@@ -109,7 +111,7 @@ fn collect(
 
 /// Executes a template with [[ ]] delimiters, so source code in the
 /// templates keeps its braces. The surface is exactly what the template
-/// sets use: the four fields and one conditional block.
+/// sets use: the five fields and one conditional block.
 fn template(name: &str, text: &str, o: &Options) -> Result<String, String> {
     let mut out = text.to_string();
     // The one conditional: go.mod's require block for offline scaffolds.
@@ -127,6 +129,7 @@ fn template(name: &str, text: &str, o: &Options) -> Result<String, String> {
         ("[[ .Name ]]", o.name.clone()),
         ("[[ .GoVersion ]]", o.go_version.clone()),
         ("[[ .SDKVersion ]]", o.sdk_version.clone()),
+        ("[[ .FunctionPackage ]]", o.function_package.clone()),
     ] {
         out = out.replace(token, &value);
     }
@@ -176,6 +179,7 @@ mod tests {
             go_version: "1.26.6".to_string(),
             sdk_version: "v0.7.1".to_string(),
             requires: true,
+            function_package: crate::release::FALLBACK_FUNCTION_PACKAGE.to_string(),
         }
     }
 
