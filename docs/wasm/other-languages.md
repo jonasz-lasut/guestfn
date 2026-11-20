@@ -1,7 +1,7 @@
 # Other languages
 
 This page is for a module author choosing a guest language. It lists the four
-flavours `guestfn init` scaffolds, the guests that exist only as examples, and
+flavours `guestfn init` scaffolds, the guests that exist as examples alone, and
 what the project hasn't tested. Pick a flavour, scaffold it, then follow [Write
 a module](write-a-module.md). Any toolchain that produces a component for the
 [ABI v2](../abi-v2.md) world, `guestfn:function`, works: the runtime checks the
@@ -80,7 +80,7 @@ with the wasip1 adapter of the runtime's own Wasmtime, which is the adapter
 version the runtime was built with. A `zig build` that links wit-bindgen's C
 bindings already leaves a core module with the `component-type` section, and
 `guestfn build` wraps it directly. For `go` and MoonBit, wit-bindgen writes
-bindings only, so `guestfn build` embeds the world from `wit/` first.
+bindings alone, so `guestfn build` embeds the world from `wit/` first.
 
 ## Examples without a scaffold
 
@@ -107,8 +107,8 @@ WIT and the glue), so copy the example to start from it.
   [nanopb](https://jpa.kapsi.fi/nanopb/) over the vendored proto and links the
   same C bindings. The glue is `src/wasmfn.c`. The core module imports no
   wasip1, and `guestfn build` wraps it without an adapter. `protoc` and
-  `nanopb_generator` are needed only to
-  regenerate the codec, `wit-bindgen` only for the bindings. `zig build test`
+  `nanopb_generator` are needed to
+  regenerate the codec alone, `wit-bindgen` for the bindings alone. `zig build test`
   runs the unit tests natively. Its scaffold retired on 2026-11-08 (#264).
 - **C#**:
   [`examples/function-wasm-csharp`](https://github.com/jonasz-lasut/guestfn/tree/main/examples/function-wasm-csharp),

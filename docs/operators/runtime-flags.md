@@ -37,8 +37,8 @@ Compiled modules are cached in memory, and fetched modules and compiled artifact
 | flag | env | default | `validate` | purpose |
 |---|---|---|---|---|
 | `--enable-memory-cache` | `ENABLE_MEMORY_CACHE` | `true` | no | keep compiled modules in memory between requests; the flag takes a value, and with `--enable-memory-cache=false` each request maps the compiled artifact from disk and releases it afterward |
-| `--max-cached-modules` | `MAX_CACHED_MODULES` | `0` (unbounded) | no | most compiled modules resident at once; past it the least recently used is dropped, freed once its last run ends |
-| `--max-cache-size` | `MAX_CACHE_SIZE` | `0` (unbounded) | no | MB the two on-disk caches may hold together; past it the runtime removes the least recently used entries, at startup and every ten minutes. function-oci keeps the root filesystem of an image for as long as the image is in memory, whatever the bound. Size the volume, or set this below its size |
+| `--max-cached-modules` | `MAX_CACHED_MODULES` | `0` (unbounded) | no | most compiled modules resident at once; past it the module idle longest is dropped, freed once its last run ends |
+| `--max-cache-size` | `MAX_CACHE_SIZE` | `0` (unbounded) | no | MB the two on-disk caches may hold together; past it the runtime removes the entries unused for longest, at startup and every ten minutes. function-oci keeps the root filesystem of an image for as long as the image is in memory, whatever the bound. Size the volume, or set this below its size |
 | `--warm-modules` | `WARM_MODULES` | unset | no | modules loaded before readiness; see [Readiness and warm-up](readiness.md) |
 
 ## Signing
@@ -79,7 +79,7 @@ The SDK's flags `--insecure`, `--debug`, `--tls-certs-dir`, `--address` and `--m
 
 ## Cache storage
 
-The caches live under `/tmp/guestfn-cache`, which isn't configurable. Mount an `emptyDir` there if the pod's root filesystem is read-only, or a volume to keep the fetched modules and manifests across pod restarts:
+The caches live under `/tmp/guestfn-cache`, which isn't configurable. Mount an `emptyDir` there if the pod's root filesystem can't be written, or a volume to keep the fetched modules and manifests across pod restarts:
 
 ```yaml
 spec:
@@ -98,7 +98,7 @@ spec:
               claimName: guestfn-cache
 ```
 
-A volume keeps the fetched modules and the manifests, which the runtime verifies against their digest on every read. It doesn't keep the compiled code. Each process signs the artifacts it writes under a key drawn at startup and refuses every other ([trust model](trust-model.md#the-cache-directory)). A restarted pod compiles its modules again. Pods must not share a volume, because each would refuse and overwrite the other's artifacts. Give each pod its own volume, with the runtime as its only writer. The runtime removes the compiled directories of other Wasmtime versions after a day without writes.
+A volume keeps the fetched modules and the manifests, which the runtime verifies against their digest on every read. It doesn't keep the compiled code. Each process signs the artifacts it writes under a key drawn at startup and refuses every other ([trust model](trust-model.md#the-cache-directory)). A restarted pod compiles its modules again. Pods must not share a volume, because each would refuse and overwrite the other's artifacts. Give each pod its own volume, with no writer but the runtime. The runtime removes the compiled directories of other Wasmtime versions after a day without writes.
 
 ## Opening the sandbox
 

@@ -32,8 +32,8 @@ in the manifest. The person who deploys an instance of the module knows the
 values. In a Composition pipeline that person is whoever writes the
 composite resource, since the composite resource is the one object per
 instance. The Composition author sits between the two and assembles the
-pipeline; they know the module's structure only when they also wrote the
-module, and the values only when they also own the instance. A value
+pipeline; they know the module's structure as its author alone and the values as the
+instance's owner alone. A value
 written in the Composition exists once per Composition, the tenant it
 serves can't change it, and in the `module.from` case the author wrote it
 against a schema they haven't seen.
@@ -68,7 +68,7 @@ config:
   # allowEmpty: true              # an unset field runs the module unconfigured
 ```
 
-`config` is an object with two fields, both read from the Input only:
+`config` is an object with two fields, both read from the Input alone:
 
 - `config.from` (required within `config`): a field of the observed
   composite resource under `spec.` or `status.`, with the same grammar and
@@ -107,7 +107,7 @@ config.from spec.addOnConfig: no observed composite resource to read it from
 ```
 
 Once the runtime has read the module's manifest (step 6 of `runner.rs`),
-it checks the value against `config.schema` exactly as it checked the
+it checks the value against `config.schema` the way it checked the
 static value, and the refusal keeps its wording, `module <desc> config does
 not match the module's schema: /greeting: got number, want string`. A
 module without a schema accepts any object. An unset field under
@@ -147,7 +147,7 @@ API server's bound on the composite resource bounds the value's size.
 Secrets don't belong in configuration. The guests' page repeats this for
 tenant-authored configuration, and points at step credentials.
 
-`compositionPolicy` and `limits` remain read from the Input only, as required by
+`compositionPolicy` and `limits` remain read from the Input alone, as required by
 the record titled [Module source schema](one-pager-module-source-schema.md).
 `config` joins `module.from` as the second thing the composite resource may
 author.

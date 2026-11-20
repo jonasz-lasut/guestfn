@@ -50,8 +50,8 @@ audit's draft of this record proposed the opt-in `--cache-key-file`.
 ## Alternatives
 
 Storing the module's digest inside the artifact, or beside it, binds
-nothing: whoever can plant an artifact can plant the digest with it. Only a
-secret the writer of a planted file doesn't hold distinguishes the runtime's
+nothing: whoever can plant an artifact can plant the digest with it. A
+secret the writer of a planted file doesn't hold alone distinguishes the runtime's
 output from anyone else's.
 
 A key mounted from a Secret (`--cache-key-file`) would keep a persisted

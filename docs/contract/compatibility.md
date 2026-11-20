@@ -121,9 +121,9 @@ Among what a 0.x release may change:
 - The engine's flags and their defaults: `--vmm-binary-path`, `--guest-kernel-path`,
   `--guest-init-path` and `--vm-vcpus`
   ([Install function-oci](../oci/install.md#flags)).
-- The wording of the engine's fatal results and of the refusals only
-  function-oci prints.
-- The metrics only function-oci emits:
+- The wording of the engine's fatal results and of the refusals that
+  function-oci alone prints.
+- The metrics that function-oci alone emits:
   `guestfn_module_snapshot_duration_seconds`, and the `snapshot` value of
   the `cache` label on `guestfn_module_cache_events_total`.
 - Alpha features behind flags of their own, VM snapshots among them

@@ -10,8 +10,8 @@ Without a `--sandbox-policy-file`, a verifier makes every module need a
 signature: `--cosign-key`, `--cosign-trusted-root` or
 `--cosign-trust-instance`. With a policy file, its `requireSignature` rules
 select the repositories that must be signed and the rest run unsigned.
-`--cosign-key` then only supplies keys (see [per repository](#requiring-signatures-per-repository)).
-Only OCI artifacts have a cosign signature, so a source of another type is
+`--cosign-key` then supplies keys and does nothing else (see [per repository](#requiring-signatures-per-repository)).
+OCI artifacts alone have a cosign signature, so a source of another type is
 refused wherever a signature is required. With `--cosign-key` alone, that's
 every `Path` and `HTTP` source. Under a policy it's an `HTTP` source whose URL a
 `requireSignature` rule matches. An `HTTP` URL the rules can't be matched
@@ -47,8 +47,8 @@ bundle the keys are the trust root, so its key hint and transparency-log
 entries aren't consulted.
 
 cosign 2's legacy signatures (the `sha256-<hex>.sig` tag, which cosign 3
-writes with `--new-bundle-format=false`) aren't read. A module signed only
-that way counts as unsigned and is refused: re-sign it with cosign 3.
+writes with `--new-bundle-format=false`) aren't read. A module signed in
+that way alone counts as unsigned and is refused: re-sign it with cosign 3.
 
 ## Keyless signatures
 
@@ -170,8 +170,8 @@ mirror isn't supported.
 
 An operator policy (`--sandbox-policy-file`) can require a signature per
 repository through a `requireSignature` rule over the same `Repository`
-hierarchy the module fence uses. Only the repositories you name must be
-signed:
+hierarchy the module fence uses. The repositories you name must be
+signed, and no others:
 
 ```cedar
 permit (principal, action == Action::"requireSignature", resource)

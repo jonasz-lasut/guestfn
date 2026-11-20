@@ -4,7 +4,7 @@ This page is for operators building dashboards and alerts on the runtime. It
 lists every series served on `--metrics-address` and the formats it speaks.
 The endpoint is `:8080/metrics` by default, and an empty value disables it.
 It's plain HTTP with no authentication: admit it from the scraper's namespace
-only ([the side ports](../wasm/install.md#the-side-ports)). Probes are on
+alone ([the side ports](../wasm/install.md#the-side-ports)). Probes are on
 [Readiness and warm-up](readiness.md).
 
 | metric | labels | meaning |
@@ -42,13 +42,13 @@ The `memory_denials_total` reasons:
 - `limit`: the growth passed the run's ceiling (`limits.memory` or `--module-memory-limit`).
 - `pool`: `--max-total-run-memory` couldn't serve the growth before the run's deadline.
 
-The trusted-root series exist only with `--cosign-trust-instance` ([signatures](signatures.md)), and every outcome starts at zero. The `refreshes_total` outcomes:
+The trusted-root series exist when `--cosign-trust-instance` is set ([signatures](signatures.md)) and not otherwise, and every outcome starts at zero. The `refreshes_total` outcomes:
 
 - `updated`: a root was put in use, the first one or one that differs from the last. The memo of verified modules is forgotten with it.
 - `unchanged`: the same root was fetched again.
 - `error`: the fetch failed and the last good root stays. The log has the reason.
 
-Alert on the root's age growing past a few refresh intervals (`--cosign-tuf-refresh`), and on the `error` outcome moving.
+Alert on the root's age growing past twice the refresh interval (`--cosign-tuf-refresh`), and on the `error` outcome moving.
 
 No metric has a module or host label, because the sets of digests and hosts a Function serves are unbounded. The logs include the module reference and digest, and the egress audit line states the host.
 
@@ -70,6 +70,6 @@ The runtime serves the gRPC server series of the Prometheus gRPC interceptor, wi
 
 Each is labelled `grpc_type`, `grpc_service` and `grpc_method`.
 
-Only unary calls (`RunFunction`, health `Check`) are counted. Streaming methods (reflection, health `Watch`) exist from startup, at zero until the first call.
+Unary calls (`RunFunction`, health `Check`) alone are counted. Streaming methods (reflection, health `Watch`) exist from startup, at zero until the first call.
 
 For latency, use `guestfn_module_run_duration_seconds`.

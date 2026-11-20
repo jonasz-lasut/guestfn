@@ -42,7 +42,7 @@ A later run of the same image and VM size starts a fresh `firecracker` with
 the run's own vsock socket (`vsock_override`), maps the memory file
 privately and resumes the VM. Firecracker resets the guest's vsock
 connections across a snapshot: it queues the reset when it writes the
-snapshot, and the guest's driver handles it on resume. That reset ends the
+snapshot, and the guest's driver handles it when the VM resumes. That reset ends the
 read the parked init blocks in. The init connects to the clone's host and
 says hello as it does after a boot, and the host sends the run. From there
 the run uses the booted run's code, with its frames and its fatal wording.
@@ -88,7 +88,7 @@ bytes before it starts the process.
   five seconds behind the host. With it on, the clone read within a second
   of the host.
 - With the seed off, five clones still drew five different values from
-  `/dev/urandom`, most likely through the VMGenID device, which Firecracker
+  `/dev/urandom`, probably through the VMGenID device, which Firecracker
   updates on a restore. The seed covers a guest kernel without that device.
 
 Clones of one snapshot share the kernel's address layout, the kernel
@@ -98,8 +98,8 @@ exposure to a module's view of its own earlier runs.
 
 ### The key
 
-A snapshot restores only into the memory size and the vCPU count it came
-from. A step's `limits.memory` sizes the VM: the VM gets that limit plus
+A snapshot restores into the memory size and the vCPU count it came
+from, and into no other. A step's `limits.memory` sizes the VM: the VM gets that limit plus
 64 MiB for the kernel. That makes the key an image, a VM memory size and a
 vCPU count. The vCPU count is the operator's `--vm-vcpus`, one value for
 the runtime, which leaves `limits.memory` as what multiplies an image's
@@ -168,7 +168,7 @@ path after one warm-up run.
 | until the init connects | 1030 ms | 36 ms |
 | the protocol and the process | 85 ms | 206 ms |
 | `firecracker`'s resident memory at the exit | 49.7 MiB | 20.6 MiB |
-| `firecracker`'s minor page faults | 12 203 | 1 086 |
+| `firecracker`'s minor page faults | 12203 | 1086 |
 
 The first run of an image takes 1.75 s with snapshots on: the boot, then
 about 0.6 s to write the memory file and rewrite it sparse. That file is

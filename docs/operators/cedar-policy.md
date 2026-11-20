@@ -8,11 +8,10 @@ rule and to read the refusal it produces. Mounting the operator's file is in the
 [operator grant policy](grant-policy.md), signing setup in
 [signatures](signatures.md) and egress budgets in [HTTP egress](http-egress.md).
 
-A module gets a capability beyond the default sandbox only when three layers
-agree: its manifest requests it (`requires`), the Input's `compositionPolicy`
+A module gets a capability beyond the default sandbox through the agreement of three layers: its manifest requests it (`requires`), the Input's `compositionPolicy`
 permits it and the operator's policy file permits it. Both policy layers are
 [Cedar](https://www.cedarpolicy.com) documents over one schema. A rule means the
-same in both, and a layer can only narrow what the layer before it allows. The
+same in both, and a layer can narrow what the layer before it allows and nothing more. The
 [trust model](trust-model.md) explains the split.
 
 ## A minimal policy
@@ -43,13 +42,13 @@ The runtime compiles the operator policy at startup and doesn't reread it. A
 change needs a restart. The composition policy is the Input's
 `compositionPolicy` string, compiled per Composition and cached by content hash.
 The [Input reference](input-reference.md) says where it goes in the Input and
-that the runtime reads it from the Input only, never from the composite
+that the runtime reads it from the Input alone, never from the composite
 resource.
 
 `requireSignature`, `trustSigner` and `dialAddress` are the operator's alone:
 the runtime never evaluates a `compositionPolicy` rule for them. `pullModule` is
 the composition author's alone. The operator policy has no say in where an
-XR-chosen module comes from, only in what it's granted once chosen.
+XR-chosen module comes from, in what it's granted once chosen.
 
 ## The principal
 
@@ -64,7 +63,7 @@ of the step. Its attributes are strings:
 
 A request with no observed composite resource gets the zero principal, with
 every attribute empty. It matches no condition that tests one, and that's safe
-because both layers only narrow. `function validate` builds the principal from
+because both layers narrow and never widen. `function validate` builds the principal from
 `--xr` and uses the zero principal without it.
 
 `requireSignature` and `trustSigner` see the placeholder principal
@@ -167,18 +166,18 @@ notes below it cover what a cell can't:
 | action | layer | resource | context | what a matching `permit` grants |
 |---|---|---|---|---|
 | `pullModule` | composition | `Repository` | none | an XR-chosen source (`module.from`) may be fetched from that location, and an XR-chosen HTTP source's `manifestURL` is fenced by the same rules |
-| `spendCredential` | both | `Credential` | `repository`, for an XR-chosen pull credential only | the credential an env binding reads, one a module reads whole (`requires.credentials`) or an XR-chosen module's pull credential |
+| `spendCredential` | both | `Credential` | `repository`, for an XR-chosen pull credential alone | the credential an env binding reads, one a module reads whole (`requires.credentials`) or an XR-chosen module's pull credential |
 | `usePrivateTmp` | both | `Capability::"privateTmp"` | none | the private `/tmp` the manifest requires |
 | `setEnv` | both | `Capability::"env"` | `keys`, the set of every environment variable name the manifest binds | the env bindings as a whole |
 | `grantEgress` | both | `HostPattern` | `method` (upper case) and `path` (the rule's `pathPrefix`, empty when it has none) | one rule's host and method |
 | `composeResource` | both | `Kind` | `change`, `name` and `target` | nothing: it fences the module's output |
-| `requireResource` | both | `Kind` | `name`, `labels` and `namespace`, each present only where the selector sets it | nothing: it fences what the module asks Crossplane for |
+| `requireResource` | both | `Kind` | `name`, `labels` and `namespace`, each present when the selector sets it and absent otherwise | nothing: it fences what the module asks Crossplane for |
 | `requireSignature` | operator | `Repository` | none | nothing: it demands a cosign signature for modules at that location |
 | `trustSigner` | operator | `Repository` | `issuer` and `identity` | nothing by itself: it makes a keyless signer trusted for `requireSignature` |
 | `dialAddress` | operator | none | `ip` | nothing at request time: it adds to the egress block list |
 
 - `spendCredential` has `context.repository`, the module's `Repository` entity,
-  only for an XR-chosen OCI source's pull credential in the composition layer.
+  for an XR-chosen OCI source's pull credential in the composition layer alone.
   It's absent for an env binding's credential and for `requires.credentials`, so
   test it with `context has repository`.
 - `setEnv` is decided once for all bindings, and `spendCredential` then decides
@@ -193,8 +192,8 @@ notes below it cover what a cell can't:
   of its `matchLabels` with the label keys as attributes
   (`context.labels has team`, `context.labels["app.kubernetes.io/part-of"]`),
   and `namespace` is the selector's namespace. A selector matches by name or
-  by labels, never both, and an attribute the selector doesn't set is absent,
-  so test it with `has` first. See [the read fence](#the-read-fence).
+  by labels, never both, and an attribute the selector doesn't set is absent, so
+  test it with `has` first. See [the read fence](#the-read-fence).
 - `trustSigner`'s `issuer` is the OIDC issuer of a keyless signature's Fulcio
   certificate and `identity` its subject alternative name, both strings for `==`
   and `like`. [Signatures](signatures.md) has the precedence with `--cosign-key`.
@@ -219,13 +218,13 @@ The composition layer evaluates the same way, in two regimes.
 The `module.from` fences are default-deny. A module the composite resource
 chooses from an OCI or HTTP source must be permitted by a `pullModule` rule, and
 an Input with no `compositionPolicy` is refused for such a source. An XR-chosen
-OCI source may specify a step credential only where a `spendCredential` rule
-permits it, and `context.repository` lets one rule cover both halves. A static
+OCI source may specify a step credential where a `spendCredential` rule
+permits it and nowhere else, and `context.repository` lets one rule cover both halves. A static
 source, specified in the Input, isn't fenced.
 
 The sandbox actions are scoped default-permit. The layer narrows `usePrivateTmp`,
 `setEnv`, `grantEgress` and `spendCredential` (for env bindings and
-`requires.credentials`) only when one of its rules, `permit` or `forbid`, scopes
+`requires.credentials`) once one of its rules, `permit` or `forbid`, scopes
 that action with `action == Action::"setEnv"` or
 `action in [Action::"setEnv", ...]`. Until then the manifest and the operator
 decide that action alone. Once scoped, a matching `permit` and no matching
@@ -386,7 +385,7 @@ when { resource in Repository::"ghcr.io/secure" };
 Modules pulled from under `ghcr.io/secure` need a cosign signature that a
 `--cosign-key` key verifies, or a keyless one by a trusted signer. Modules from
 `ghcr.io/open/greeter` run unsigned. A required HTTP source is refused before
-any fetch, since only OCI artifacts can be signed. A `Path` source is never
+any fetch, since OCI artifacts alone can be signed. A `Path` source is never
 required.
 
 ### `trustSigner`
@@ -403,11 +402,11 @@ when {
 };
 ```
 
-A keyless signature on a module under that repository counts only when its
+A keyless signature on a module under that repository counts on one condition: its
 Fulcio certificate was issued to the `acme/modules` release workflow on a version
 tag, authenticated by GitHub Actions. `like` takes `*` as a wildcard. The runtime
-verifies the signature against the trusted root first. The rule only sets which
-verified signers are trusted, so a rule with no `when` trusts
+verifies the signature against the trusted root first. The rule sets which
+verified signers are trusted and does nothing else, so a rule with no `when` trusts
 every identity the root's authorities certified.
 
 ### `dialAddress`

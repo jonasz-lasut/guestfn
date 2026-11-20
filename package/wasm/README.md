@@ -44,8 +44,8 @@ spec:
 The module receives the whole `RunFunctionRequest` and returns the whole
 `RunFunctionResponse`, so desired resources, results, conditions, requirements
 (extra resources), context and TTL pass through as they do for a native
-function. The runtime withholds only the step credentials a module wasn't
-granted, and replaces the Input's `config` reference with the configuration
+function. The runtime withholds the step credentials a module wasn't
+granted and nothing else, and replaces the Input's `config` reference with the configuration
 it read from the composite resource.
 
 A module has no network, filesystem or environment by default. Anything
@@ -100,7 +100,7 @@ scaffolds, with the toolchain, the scaffolded module's size and an example.
 | `ts` | node + npm (esbuild, jco) | ~14 MB | [`examples/function-wasm-ts`](../../examples/function-wasm-ts) |
 | `python` | `python3` (componentize-py) | ~21 MB | [`examples/function-wasm-python`](../../examples/function-wasm-python) |
 
-Zig, C, C#, C++, Odin and MoonBit exist as examples only
+Zig, C, C#, C++, Odin and MoonBit exist as examples alone
 ([`examples/function-wasm-zig`](../../examples/function-wasm-zig),
 [`examples/function-wasm-c`](../../examples/function-wasm-c),
 [`examples/function-wasm-csharp`](../../examples/function-wasm-csharp),

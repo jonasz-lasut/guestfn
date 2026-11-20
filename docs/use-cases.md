@@ -26,7 +26,7 @@ logic someone other than the Composition's author maintains.
   locally, `guestfn push` and reference the digest in the Composition. Rolling
   forward or back is a digest change in that Composition; nothing is
   reinstalled.
-- **Many small functions, one runtime.** Each team maintains its own modules,
+- **Small functions, one runtime.** Each team maintains its own modules,
   in any of the [supported languages](wasm/other-languages.md). The cluster
   runs one function-wasm, which compiles each module once per digest and caches
   it.
@@ -42,13 +42,13 @@ logic someone other than the Composition's author maintains.
 
 By default a module doesn't get network, filesystem or environment access; cluster
 state comes in through the request and the module returns desired state. A
-module can request more in its manifest, and the runtime grants it only when
-the Composition's policy and the operator's policy both permit it. See
+module can request more in its manifest. The runtime grants the request when
+the Composition's policy and the operator's policy both permit it and withholds it otherwise. See
 [HTTP egress](operators/http-egress.md) and the
 [trust model](operators/trust-model.md).
 
 function-wasm doesn't support Crossplane Operations: its package declares
-only the `composition` capability.
+the `composition` capability alone.
 
 ## Worked examples
 
@@ -67,8 +67,8 @@ explains why these were chosen and how they're published.
 version in the example's `guestfn.yaml` isn't in the registry yet. `guestfn
 inspect <ref>` prints the digest-pinned reference for a Composition.
 
-- [`examples/function-wasm-rust`](https://github.com/jonasz-lasut/guestfn/tree/main/examples/function-wasm-rust) (Rust): only
-  Cloudflare may connect to an origin. The module composes the origin's AWS
+- [`examples/function-wasm-rust`](https://github.com/jonasz-lasut/guestfn/tree/main/examples/function-wasm-rust) (Rust): an origin
+  accepts connections from Cloudflare alone. The module composes the origin's AWS
   security group and one ingress rule per range Cloudflare publishes, read
   at reconcile time through the host's egress - a capability its manifest
   requests and both policy layers must grant.
@@ -90,8 +90,8 @@ inspect <ref>` prints the digest-pinned reference for a Composition.
   of the team the namespace of the composite resource belongs to, with that
   team's token from a step credential holding every team's, and stamps
   `team`, `owner` and `cost-center` tags on every composed managed
-  resource. The module receives that credential only where its manifest
-  requires it and both policy layers permit it.
+  resource. The module receives that credential where its manifest
+  requires it and both policy layers permit it, and nowhere else.
 - [`examples/function-wasm-cpp`](https://github.com/jonasz-lasut/guestfn/tree/main/examples/function-wasm-cpp) (C++): a TLS
   Secret's self-signed certificate, kept fresh. A `ServerCertificate` names
   the Secret, the DNS names and the validity; the module asks Crossplane for

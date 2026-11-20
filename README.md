@@ -6,7 +6,7 @@
 Neither sandbox has had an independent security review. From 1.0.0 the
 Input, the guest contracts, the runtime flags and the rest of what
 [Compatibility](https://jonasz-lasut.github.io/guestfn/contract/compatibility.html)
-lists change only through its deprecation policy. Before it they could
+lists change through its deprecation policy alone. Before it they could
 change between minor releases.
 
 guestfn builds [Crossplane](https://crossplane.io) composition functions
@@ -40,9 +40,9 @@ What the two functions share, and what this repository is about:
   configuration
   ([Module manifests](https://jonasz-lasut.github.io/guestfn/guests/module-manifests.html)).
 - **The policy layers.** A module has no network, filesystem or
-  environment by default; it gets a capability only where the manifest
+  environment by default; it gets a capability where the manifest
   requests it, the Composition's `compositionPolicy` permits it and the
-  operator's policy permits it. The same layers fence what a module reads
+  operator's policy permits it, and in no other case. The same layers fence what a module reads
   from and writes to the cluster
   ([Cedar policy](https://jonasz-lasut.github.io/guestfn/operators/cedar-policy.html),
   [trust model](https://jonasz-lasut.github.io/guestfn/operators/trust-model.html)).
@@ -51,7 +51,7 @@ What the two functions share, and what this repository is about:
   runtime keeps fetched and compiled modules on disk
   ([Signatures](https://jonasz-lasut.github.io/guestfn/operators/signatures.html)).
 - **The transparent proxy.** The module receives the whole request and
-  returns the whole response; the runtime edits only the step credentials
+  returns the whole response; the runtime edits no field but the step credentials
   the module wasn't granted and the configuration it read for it.
 - **`guestfn`**, the CLI: scaffolds, builds, inspects and publishes
   WebAssembly modules, publishes an image as an OCI module, writes a

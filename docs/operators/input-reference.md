@@ -3,9 +3,9 @@
 This page is for composition authors writing a function-wasm step and for
 operators who need to predict what the runtime admits. It lists every field
 of the step's Input and what the runtime enforces for each. Crossplane never
-installs the Input's CRD, so the runtime is the only enforcement: it checks
+installs the Input's CRD. The runtime enforces it alone and checks
 every rule on every request, and `function validate` applies the same checks
-offline. The CRD under `package/wasm/input/` is for tooling and IDEs only, and
+offline. The CRD under `package/wasm/input/` is for tooling and IDEs alone, and
 the runtime generates it from its own types.
 
 The Input is `apiVersion: guestfn.crossplane.io/v1`, `kind: Input`. A step
@@ -43,17 +43,17 @@ The fields are:
 | field | type | description |
 |---|---|---|
 | `module` | object | Required. Where the module comes from |
-| `module.type` | string | Required. `OCI`, `HTTP` or `Path`. Exactly one of the object it names (`oci`, `http`, `path`) or `module.from` is set, and no object of another type may be present. Under `function-oci` only `OCI`: an OCI module is an image pulled from a registry, never a file or a URL |
+| `module.type` | string | Required. `OCI`, `HTTP` or `Path`. One of the object it names (`oci`, `http`, `path`) or `module.from` is set, not both, and no object of another type may be present. With `function-oci` the type is `OCI` alone: an OCI module is an image pulled from a registry, never a file or a URL |
 | `module.oci.ref` | string | OCI artifact reference pinned to its manifest digest, `registry/repo@sha256:…`, as `guestfn push` prints it. See [OCI references](#oci-references) |
 | `module.oci.credentials` | string | name of the pipeline-step credential used to pull. See [Pull credentials](#pull-credentials) |
 | `module.http.url` | string | the HTTP or HTTPS URL the module is downloaded from. See [HTTP redirects](#http-redirects) |
 | `module.http.digest` | string | Required. `sha256:<hex>` of the module, which the runtime verifies the download against. A digest the runtime already caches is served without a download |
-| `module.http.manifestURL` | string | Optional. A `guestfn.yaml` served beside the module. Set with `module.http.manifestDigest`. Without it an HTTP source has no manifest and gets only the default sandbox. For a `module.from` `http` source, `compositionPolicy` `pullModule` fences it like the module URL |
+| `module.http.manifestURL` | string | Optional. A `guestfn.yaml` served beside the module. Set with `module.http.manifestDigest`. Without it an HTTP source has no manifest and gets the default sandbox alone. For a `module.from` `http` source, `compositionPolicy` `pullModule` fences it like the module URL |
 | `module.http.manifestDigest` | string | `sha256:<hex>` of the manifest, verified against it. Required with `module.http.manifestURL`, refused without it |
 | `module.path` | string | a file relative to the runtime's `--module-dir`. Refused unless that flag is set. A `Path` source has no digest |
-| `module.manifestPath` | string | Optional, `type: Path` only. A `guestfn.yaml` under `--module-dir`, the manifest of a local or volume-mounted module. Never set through `module.from`, and re-read on each request. A local edit takes effect without a restart |
+| `module.manifestPath` | string | Optional, for `type: Path` alone. A `guestfn.yaml` under `--module-dir`, the manifest of a local or volume-mounted module. Never set through `module.from`, and re-read on each request. A local edit takes effect without a restart |
 | `module.from` | string | a field of the observed composite resource, under `spec.` or `status.`, that holds the source. See [Modules chosen by the XR](#modules-chosen-by-the-xr) |
-| `module.allowEmpty` | boolean | Optional, with `module.from` only. See [Skipping a step](#skipping-a-step) |
+| `module.allowEmpty` | boolean | Optional, with `module.from` alone. See [Skipping a step](#skipping-a-step) |
 | `compositionPolicy` | string | the composition author's Cedar layer. See [The composition policy](#the-composition-policy) |
 | `limits.timeout` | duration | time budget of one run, e.g. `5s`. See [Limits](#limits) |
 | `limits.memory` | quantity | memory a run may use, its linear memories and tables together, e.g. `128Mi`. See [Limits](#limits) |
@@ -66,9 +66,9 @@ The fields are:
 
 A download of `module.http.url` or `module.http.manifestURL` follows up to ten
 redirects. A redirect within the origin of the URL, which is its scheme, host
-and port, is followed unchanged. A redirect to another host is followed only
-when that host resolves to an address outside the
-[default block list](http-egress.md#block-list-and-cidr-rules), and the runtime
+and port, is followed unchanged. A redirect to another host is refused unless that host resolves to an address
+outside the
+[default block list](http-egress.md#block-list-and-cidr-rules). The runtime
 connects to it directly, without a proxy. A release asset that redirects to a
 public download host works. For a module behind a redirect to an address
 inside the cluster, specify the final URL in the Input instead.
@@ -77,7 +77,7 @@ inside the cluster, specify the final URL in the Input instead.
 
 `module.oci.ref` must include a manifest digest. A tag alone is refused, and
 the runtime doesn't resolve tags at request time. With
-`registry/repo:tag@sha256:…` only the digest is fetched. The manifest states
+`registry/repo:tag@sha256:…` the digest alone is fetched. The manifest states
 its layer's digest, and the runtime verifies both on fetch.
 
 The runtime reads the registry part into one canonical form, and the
@@ -92,8 +92,8 @@ the rules.
 The runtime takes the first layer whose media type is `application/wasm`,
 `application/vnd.wasm.content.layer.v1+wasm` or
 `application/vnd.module.wasm.content.layer.v1+wasm`. Failing that, it takes
-the only layer that isn't the manifest layer. A tar layer (a `FROM scratch`
-image) must hold the module at exactly `/fn.wasm`.
+the one layer that isn't the manifest layer. A tar layer (a `FROM scratch`
+image) must hold the module at `/fn.wasm`.
 
 ## Pull credentials
 
@@ -157,17 +157,17 @@ required for `OCI` and `HTTP` sources. See
 (absent, or `null`). The step then runs nothing and returns the request's
 desired state and context unchanged. The pipeline continues. A set field
 is handled as any static source is. The Input alone decides this, so an XR
-can leave a step empty only where the Composition allows it, and
+can leave a step empty where the Composition allows it and nowhere else, and
 `allowEmpty` without `module.from` is refused. The runtime logs a skipped
 step and counts it as `requests_total{outcome="skipped"}`.
 
 ### Spending the pull credential
 
-An XR-chosen module may specify a pull credential only where the
-`compositionPolicy` permits `spendCredential` for it, and only for a
-repository that a `pullModule` permit admits. The pull check runs first. The
+An XR-chosen module may specify a pull credential where the
+`compositionPolicy` permits `spendCredential` for it and for a
+repository that a `pullModule` permit admits, and in no other case. The pull check runs first. The
 `spendCredential` rule tests `context has repository`, because the context
-carries `repository` only for this pull credential:
+carries `repository` for this pull credential alone:
 
 ```yaml
     module:
@@ -239,15 +239,15 @@ reports the reference and leaves the value unchecked.
 point the runtime at any host.
 
 For a `module.from` source, a `pullModule` permit must match the module's
-normalized location, and a step credential may be spent only where a
-`spendCredential` permit matches. For sandbox actions the layer can only
-narrow what the manifest and the operator grant. The actions, entities,
+normalized location, and a step credential may be spent where a
+`spendCredential` permit matches and nowhere else. For sandbox actions the layer can
+narrow what the manifest and the operator grant, never widen it. The actions, entities,
 evaluation rules and refusal sentences are in the
 [Cedar policy reference](cedar-policy.md).
 
 ## Limits
 
-`limits` can only narrow what the runtime allows, never widen it.
+`limits` narrow what the runtime allows and never widen it.
 
 ```yaml
     limits:
@@ -274,7 +274,7 @@ evaluation rules and refusal sentences are in the
 
 A module declares the capabilities it can't run without in its manifest, as
 `requires` ([Module manifests](../guests/module-manifests.md)). The runtime
-grants each one only when the Input's `compositionPolicy` and the operator's
+grants each one on the condition that the Input's `compositionPolicy` and the operator's
 `--sandbox-policy-file` both permit it
 ([three-layer authorization](../one-pager-three-layer-authz.md)). The same
 two layers may fence what the module composes with `composeResource` and what
@@ -285,7 +285,7 @@ it asks Crossplane for with `requireResource`: see the
 
 ### Step credentials
 
-Of the step's credentials, the request a module receives contains only those
+Of the step's credentials, the request a module receives contains no credential but those
 its manifest names and both policy layers permit with `spendCredential`: the
 credential a `requires.env` binding reads, or one it reads whole with
 `requires.credentials`. The runtime edits every other credential out before
