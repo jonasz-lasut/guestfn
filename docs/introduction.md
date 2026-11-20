@@ -4,8 +4,8 @@
 
 The sandbox hasn't had an independent security review. From 1.0.0 the
 Input, the guest ABI, the runtime flags and the rest of what
-[Compatibility](contract/compatibility.md) lists change only through its
-deprecation policy. Before it they could change between minor releases.
+[Compatibility](contract/compatibility.md) lists change through its
+deprecation policy alone. Before it they could change between minor releases.
 
 This page is for Crossplane users deciding whether to run composition
 logic as WebAssembly modules. It assumes you know Compositions and pipeline
@@ -53,8 +53,8 @@ spec:
 The module receives the whole `RunFunctionRequest` and returns the whole
 `RunFunctionResponse`, so desired resources, results, conditions, requirements
 (extra resources), context and TTL pass through as they do for a native
-function. The runtime withholds only the step credentials a module wasn't
-granted.
+function. The runtime withholds the step credentials a module wasn't
+granted, and no others.
 
 ## Where to go next
 

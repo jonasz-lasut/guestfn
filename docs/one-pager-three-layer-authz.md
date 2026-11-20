@@ -6,10 +6,10 @@
 
 ## Summary
 
-A capability is granted if and only if three parties agree, down the trust
+A capability is granted on the agreement of three parties, and on nothing less, down the trust
 ladder (Jonasz, 2026-08-19). The module's manifest is the request. The
 composition policy and the operator policy, both Cedar, are the grants, and
-each can only narrow what the preceding layer allows.
+each can narrow what the preceding layer allows and nothing more.
 
 ```
 grant(capability) =
@@ -36,7 +36,7 @@ through `GetConfig`.
 
 Each layer is a separate Cedar `PolicySet`, and the layers are AND-combined, so
 no layer can widen another. A greedy manifest still meets both policies, and a
-composition author who writes `permit(everything)` has only declined to narrow:
+composition author who writes `permit(everything)` has merely declined to narrow:
 the operator policy still caps. Each layer is evaluated apart from the others.
 
 ## Defaults per layer
@@ -47,7 +47,7 @@ The operator layer is default-deny. Without `--sandbox-policy-file`, a module
 gets the default sandbox and nothing else.
 
 An absent manifest requests nothing, so a `path`, `http` or OCI source without
-a manifest runs in the default sandbox. A manifest can only refuse earlier; it
+a manifest runs in the default sandbox. A manifest can refuse earlier and nothing more; it
 never makes a run possible. A `path` or `http` source can point at a
 `guestfn.yaml` by reference (`manifestPath`, `manifestURL`). Such a source is a static source,
 fenced like any other, and the manifest read through it makes the same request.
@@ -89,18 +89,18 @@ content hash.
 
 ## Environment and step credentials
 
-A module that reads only `$DATABASE_URL` declares the binding in its manifest:
+A module that reads `$DATABASE_URL` alone declares the binding in its manifest:
 `requires.env: [{name: DATABASE_URL, fromCredential: {name: db, key: url}}]`.
 The runtime resolves it from the request's step credentials, and
 `spendCredential` for `db` must be permitted by both Cedar layers. The module
-defines its env contract and never supplies the value. A binding lists exactly
-the keys it needs. There's no bulk import of every key of a credential.
+defines its env contract and never supplies the value. A binding lists the keys it needs
+and no others. There's no bulk import of every key of a credential.
 
 Step credentials arrive in every `RunFunctionRequest`. Crossplane hands them
 all to a native function, and forwarding them all made `spendCredential` gate
 a convenience: a module denied an env binding could still read the key from
 its request (issue #122, 2026-10). The runtime edits the request at the wire
-level instead, and the module receives only:
+level instead, and the module receives:
 
 - the credential each admitted `requires.env` binding reads, whole;
 - each credential the manifest lists under `requires.credentials`, whole: a
@@ -163,7 +163,7 @@ the evaluation rules are on [Cedar policy](operators/cedar-policy.md).
 
 ## Code shape
 
-`crates/function/src/authz.rs` is the only file that imports `cedar-policy`. It
+`crates/function/src/authz.rs` is the one file that imports `cedar-policy`. It
 holds `CompositionPolicy` and `OperatorPolicy` with a `permits_*` method per
 action, and `scopes_action` (the composition layer's opt-in signal, with
 `scopes_action` on the operator's for the two response fences).

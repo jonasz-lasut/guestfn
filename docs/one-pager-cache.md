@@ -2,7 +2,7 @@
 
 * Owner: @jonasz-lasut (Jonasz Małecki)
 * Reviewers: function-wasm maintainers
-* Status: implemented, revision 2.9 (revision 2.9 answers `RunFunction` with `UNAVAILABLE` until warm-up ends, where an early request was served cold. Revision 2.8 has the sweep skip the root filesystem of an image function-oci has in memory. Revision 2.7 keys the compiled tier per process, the cache key record's design. Revision 2.6 puts the manifests tier to use, perf-02 of the performance audit under the F-5 rule. Revision 2.5 states the cache posture of the 1.0 audit's F-5, and 2.4 the compiled tier's trust boundary. Revision 2.3 rewrote the record in the present tense over the Rust workspace, where warm-up loads its entries one after another and skips the signature check, which every request makes before it reads a cache)
+* Status: implemented, revision 2.9 (revision 2.9 answers `RunFunction` with `UNAVAILABLE` until warm-up ends, where a request that arrived during warm-up was served cold. Revision 2.8 has the sweep skip the root filesystem of an image function-oci has in memory. Revision 2.7 keys the compiled tier per process, the cache key record's design. Revision 2.6 puts the manifests tier to use, perf-02 of the performance audit under the F-5 rule. Revision 2.5 states the cache posture of the 1.0 audit's F-5, and 2.4 the compiled tier's trust boundary. Revision 2.3 rewrote the record in the present tense over the Rust workspace, where warm-up loads its entries one after another and skips the signature check, which every request makes before it reads a cache)
 
 function-wasm keeps its caches on disk under one fixed directory, every entry
 addressed by a content digest, plus a bounded in-memory tier for compiled
@@ -14,8 +14,8 @@ against an HMAC under a key the process draws at startup
 when another process wrote its artifact. Fetched modules are always written to disk and never held in memory.
 Compiled modules are persisted as Wasmtime artifacts, mapped from disk when
 needed and held in memory while they're used. An entry never has to be
-invalidated: its name is its content. The flags are safety limits (how many
-modules stay resident, how many compile at once), not cache tuning, and
+invalidated: its name is its content. The flags are safety limits (the number of
+modules that stay resident, the number that compile at once), not cache tuning, and
 `--warm-modules` decides when the runtime fills the caches (before readiness),
 not how.
 
@@ -41,7 +41,7 @@ not how.
 The directory is `DEFAULT_DIR` in `crates/function/src/store.rs`, created at
 startup. A pod that must keep its caches across restarts backs it with a
 volume (a `DeploymentRuntimeConfig` with an `emptyDir` survives container
-restarts, a PVC lasts across rescheduling). With a read-only root filesystem, the
+restarts, a PVC lasts across rescheduling). With a root filesystem the container can't write to, the
 pod must mount something writable there. A directory that can't be created
 stops the runtime at startup, naming it: running without caches would re-pull
 and recompile on every restart, unnoticed.
@@ -55,7 +55,7 @@ since an artifact's name is its module's digest, so it verifies by key.
 process draws at startup, and `path` checks it before it hands the path out.
 A missing or wrong sidecar is a stale miss that removes the entry. The
 runtime keeps the key in memory and nowhere else. A restart compiles every
-module again, a volume keeps only the fetched modules and the manifests, and
+module again, a volume keeps the fetched modules and the manifests and nothing else, and
 the store refuses a planted artifact.
 
 ## Keys
@@ -77,7 +77,7 @@ touches the network and no reference is resolved at request time:
   bytes. The runtime verifies the download against it before storing or
   compiling it.
 
-A cache entry is then exactly the content its name promises, and a module
+A cache entry is then the content its name promises, byte for byte, and a module
 fetched from two sources shares its blob when the bytes are the same. The
 key is also everything a hit checks. A module one Composition pulled with a
 registry credential is served without a fetch to any later request that
@@ -98,7 +98,7 @@ the development loop.
 The compiled store is namespaced by `engine::version()`
 (`crates/engine-wasm/src/wasm.rs`): the Wasmtime crate version `build.rs` reads
 from `Cargo.lock`, plus the OS and architecture. A serialized artifact loads
-only in the Wasmtime that produced it on the same host type, and a bump moves the namespace on its own. The `rust-v`
+in no Wasmtime but the one that produced it, on the same host type, and a bump moves the namespace on its own. The `rust-v`
 prefix keeps the namespace apart from any directory an earlier runtime left on
 a volume. At startup `remove_stale_versions` deletes the
 other version directories under `compiled/` once nothing has written them for
@@ -133,13 +133,13 @@ RunFunction (crates/function/src/runner.rs)
 
 - **Memory (compiled modules).** One entry per module in use, dropped after
   `DEFAULT_IDLE_TTL` (10 minutes) of idleness or, with `--max-cached-modules`,
-  when it's the least recently used entry past the bound. A request after that
+  when it's the longest-unused entry past the bound. A request after that
   goes to the artifact on disk, not back to the network or the compiler.
   Loads are single-flight per digest: concurrent first requests for one module
   wait for one load. A failed load isn't remembered, and the next request retries.
   At most `--max-concurrent-compiles` (default 1) modules compile at once. A
   compile uses every core and about a gigabyte for a large guest, and more in
-  flight only multiplies that. A cold load isn't cut short by the request's
+  flight multiplies that. A cold load isn't cut short by the request's
   deadline: the compile completes and caches, and the run that follows gets
   the remaining budget. `--enable-memory-cache=false` turns
   the tier off: every request maps the artifact from disk and releases it.
@@ -151,13 +151,13 @@ RunFunction (crates/function/src/runner.rs)
 - **Fetched modules on disk.** Written after every successful fetch, read before
   any download. With it, an HTTP server outage doesn't stop reconciling for
   modules seen before, and a rescheduled pod with a volume never re-pulls. An
-  OCI module whose artifact is gone costs one manifest read (a few KB, to
+  OCI module whose artifact is gone costs one manifest read (kilobytes, to
   learn the layer digest) and no download. Served files (`module.path`) aren't
   copied: they're on disk already. `guestfn push` and `oras push` produce raw
   `application/wasm` layers, which cost nothing to extract; a compressed tar
   layer is decompressed on every artifact miss.
 
-The runtime holds raw module bytes in memory only during the compile call.
+The runtime holds raw module bytes in memory during the compile call and at no other time.
 Warm-up is the same path entered at startup instead of at a request.
 
 ### Warm-up
@@ -176,7 +176,7 @@ signed is never served where a signature is required. The order:
 1. The caches open. A failure here refuses to start.
 2. The gRPC and health servers start listening, both reporting not serving.
    A probe reads not-ready rather than a refused connection, and a request that
-   arrives early is answered `UNAVAILABLE` (`the function is not ready`), as
+   arrives before warm-up ends is answered `UNAVAILABLE` (`the function is not ready`), as
    function-sdk-rust's own server answers one (Jonasz, 2026-11-19). Its
    caller retries. Before that decision such a request was served cold.
 3. With `--cosign-trust-instance`, the first trusted-root fetch runs, bounded
@@ -212,7 +212,7 @@ is [readiness](operators/readiness.md).
 
 `guestfn_module_cache_events_total{cache,event}` with `cache` in
 `compiled` (memory tier), `compiled-disk` (artifacts) and `blob` (fetched
-modules), and `event` in `hit`, `miss` and `stale` (`compiled-disk` only: an
+modules), and `event` in `hit`, `miss` and `stale` (`compiled-disk` alone: an
 artifact Wasmtime refused). `guestfn_module_fetch_duration_seconds{source}`
 and `guestfn_module_compile_duration_seconds` time the miss paths.
 `guestfn_module_cache_bytes{cache}` is the size of the `blob` and
@@ -224,7 +224,7 @@ series: [metrics](operators/metrics.md).
 Disk entries aren't evicted by default: they're immutable and named by digest,
 and a Composition that stops referencing a module leaves its files behind.
 `--max-cache-size` (in MB) turns the sweep on. At startup and every ten minutes
-it removes the least recently used entries across the three stores (a read
+it removes the longest-unused entries across the three stores (a read
 counts as a use: the store touches what it serves) until nine tenths of the
 bound is left, so consecutive sweeps don't each remove one entry. A removal is
 always safe, since every entry is reproducible; the next request fetches or

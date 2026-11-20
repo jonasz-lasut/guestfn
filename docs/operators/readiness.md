@@ -14,8 +14,8 @@ caches are open, the engine is up and the modules named by `--warm-modules`
 `UNAVAILABLE`, and Crossplane retries the step.
 
 Use the HTTP endpoints for Kubernetes probes. Crossplane runs functions with
-mTLS on the function port and kubelet's gRPC probe dials without credentials,
-so a `grpc:` probe never succeeds outside `--insecure`. The health port is
+mTLS on the function port and kubelet's gRPC probe dials without credentials, so
+a `grpc:` probe never succeeds outside `--insecure`. The health port is
 plain HTTP with no authentication; [the side ports](../wasm/install.md#the-side-ports)
 shows a `NetworkPolicy` for it.
 
@@ -45,7 +45,7 @@ spec:
 
 A ready pod hasn't necessarily loaded any module. The first request for a
 module on a pod compiles it. The compiled code is signed per process, and a
-restart compiles again even on a volume, which keeps only the fetched module.
+restart compiles again even on a volume, which keeps the fetched module and nothing more.
 `--warm-modules` moves that work ahead of readiness.
 
 With the flag set, the runtime listens at once but reports `NOT_SERVING` (and `/readyz` answers 503)
@@ -69,6 +69,6 @@ probe that fails for a while after start.
 ## Trusted root
 
 With `--cosign-trust-instance`, the first fetch of the Sigstore trusted root
-runs just before the modules and is bounded to one minute. It never holds
+runs right before the modules and is bounded to one minute. It never holds
 readiness back either; [signatures](signatures.md) covers what a pod does
 without a root.

@@ -15,7 +15,7 @@ may change between its releases.
 ## One microVM per request
 
 `function-oci` boots one microVM per request with Firecracker. The VM gets
-its own guest kernel, the image's root filesystem read-only under a tmpfs
+its own guest kernel, the image's root filesystem, immutable beneath a tmpfs
 overlay, the step's `limits.memory` for the process (at least 16 MiB,
 held by a cgroup the init puts the process in, so the kernel's
 out-of-memory killer ends a process past it at once) plus 64 MiB for the
@@ -47,8 +47,8 @@ Go example runs about 120 ms sooner for it, booted or restored
 
 ## Node requirements
 
-The pod needs `/dev/kvm`. An unprivileged container opens only the
-devices its container runtime admitted into its device cgroup, and a
+The pod needs `/dev/kvm`. An unprivileged container opens the
+devices its container runtime admitted into its device cgroup, no more, and a
 `hostPath` mount of the device node doesn't admit the device: the node appears
 in the container and every `open` of it fails with `Operation not permitted`.
 Kubernetes admits a device through a
@@ -72,7 +72,7 @@ args:
     - path: /dev/kvm
 ```
 
-`count` is how many pods may hold the device at once, since every one of
+`count` is the number of pods that may use the device at once, since every one of
 them shares the one `/dev/kvm`.
 
 The kubelet gives the container the node's device node unchanged, owner
@@ -222,7 +222,7 @@ and `function-oci` built from the checkout, installed with
 On a Mac, Colima with nested virtualization
 (`colima start --vm-type vz --nested-virtualization`) gives the kind node
 the VM's `/dev/kvm`, at about 5 s per run. function-oci runs on KVM
-only, and Docker Desktop doesn't expose it.
+alone, and Docker Desktop doesn't expose it.
 
 ## The development loop
 
@@ -236,7 +236,7 @@ the runtime refuses a `Path` or `HTTP` source by name). Run a `registry:3`
 container on `127.0.0.1:5000`, then `docker push` the image there and
 `guestfn push --image` the module. The runtime speaks plain HTTP to
 `localhost` and the loopback addresses (`127.0.0.1`, `[::1]`) alone, and never
-to a name that only starts like one. A registry in a cluster needs a
+to a name that begins like one but isn't one. A registry in a cluster needs a
 certificate the pod trusts, through `SSL_CERT_FILE` on the function's
 container, as the end-to-end suite's registry does
 (`crates/e2e/profiles/oci/default/drc.yaml`). To try your own module in a

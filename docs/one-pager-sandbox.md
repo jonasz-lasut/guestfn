@@ -25,7 +25,7 @@ system or a secret read from the environment. The grants below are for those.
 1. Capabilities are explicit grants. Nothing is ambient, and the operator
    denies by default.
 2. The policy layers are the Composition's and the operator's, never the
-   composite resource's. `compositionPolicy` is read from the Input only,
+   composite resource's. `compositionPolicy` is read from the Input alone,
    not through `module.from`: an XR author who can pick a module must not be
    able to widen what modules may do.
 3. The host enforces and the guest asks. Paths and network requests are
@@ -38,7 +38,7 @@ system or a secret read from the environment. The grants below are for those.
 6. A module may request a capability, never take it. Its manifest lists the
    egress rules, the private `/tmp` and the env bindings it can't run
    without ([module manifest](one-pager-module-manifest.md)); a capability is
-   granted only where both policy layers permit it
+   granted where both policy layers permit it, and nowhere else
    ([three-layer authorization](one-pager-three-layer-authz.md)). The manifest
    can make a run fail earlier, never succeed.
 
@@ -62,7 +62,7 @@ requires:
 ```
 
 The manifest loader (`crates/function/src/manifest.rs`, `egress_rules.rs`,
-`sandboxenv.rs`) checks these formats. A rule has exactly one of `host` and `hostPattern`, host
+`sandboxenv.rs`) checks these formats. A rule has one of `host` and `hostPattern`, host
 names are bare, path prefixes are normalized and binding names are
 identifiers.
 
@@ -71,10 +71,10 @@ a capability: `usePrivateTmp` for the private `/tmp`, `setEnv` (with
 `spendCredential` per binding) for the environment, `grantEgress` for egress
 (also the host allowlist) and `dialAddress` for the CIDR rules. It's evaluated
 default-deny, so with no policy file every `requires` entry is refused and the
-module gets only the default sandbox, which is all most modules need
+module gets the default sandbox alone, which is all most modules need
 (Jonasz, 2026-08-19). The Input's `compositionPolicy` may narrow any of
-those actions (scoped default-permit: it narrows only the actions it writes
-rules for). `admission::admit_requires` decides between load and run, and the
+those actions (scoped default-permit: it narrows the actions it writes
+rules for and no others). `admission::admit_requires` decides between load and run, and the
 run gets its sandbox or a fatal result such as `module … requires a private /tmp
 (requires.filesystem.privateTmp), but the runtime has no --sandbox-policy-file,
 which is required to grant sandbox capabilities`.
@@ -93,15 +93,15 @@ named `function-wasm-private-tmp-*` and created before the store
 (`crates/engine-wasm/src/sandbox.rs`). It's pre-opened read/write at `/tmp`,
 and removed when the value of the run drops, on every path out (success, trap,
 exit, deadline, host error); a removal failure is logged, never a result. It's
-the only directory a guest is ever given, so a module can't read an
+the one directory a guest is ever given, so a module can't read an
 operator-declared host path. The ABI is unchanged:
 guests use their language's file APIs, and their temp directory already
 defaults to `/tmp` on WASI. The cost on the request path
 is one `mkdir` and one removal. `docs/abi-v2.md` states the guest-visible
 contract.
 
-The directory has no byte quota of its own. Only the filesystem behind
-`$TMPDIR` limits it. Put a tmpfs `emptyDir` with a `sizeLimit` there to cap a
+The directory has no byte quota of its own. The filesystem behind
+`$TMPDIR` alone limits it. Put a tmpfs `emptyDir` with a `sizeLimit` there to cap a
 request's writes: a full tmpfs fails the guest's write, not the runtime
 ([runtime flags](operators/runtime-flags.md)).
 
@@ -158,8 +158,8 @@ host allowlist, the block list and the per-request audit line are required
 parts of the grant for that reason, and `--cosign-key` is recommended wherever
 egress is granted. The private `/tmp` is per request, empty at the start and
 removed at the end: one module can't leave state for the next or read
-another's. Environment values come only from step credentials the step
-already receives. A binding doesn't widen what the request included.
+another's. Environment values come from step credentials the step
+already receives, and from nothing else. A binding doesn't widen what the request included.
 The per-request deadline and memory cap apply under every grant. The
 sandbox protects the runtime and the operator's boundaries. It doesn't protect
 the data the Composition passes to the module.
@@ -167,7 +167,7 @@ the data the Composition passes to the module.
 ## Alternatives
 
 **Host mounts.** A Composition could map an operator-declared host directory
-into a module, read-only. The project built it, then removed it (Jonasz, 2026-08-16): a
+into a module, without write access. The project built it, then removed it (Jonasz, 2026-08-16): a
 module's inputs come through the request, so mapping part of the pod's
 filesystem into a module is a boundary the runtime doesn't offer. Data a
 module needs (templates, CA bundles) travels through `config`, the context or
@@ -187,12 +187,12 @@ toolchains already speak, with the same host policy in front of it (ABI v1 was
 removed in 1.0.0, `docs/abi-v2.md`).
 
 **Enabling capabilities by flag.** Per-capability `--enable-sandbox-*` flags
-were replaced by the Cedar policy as the only authority (Jonasz, 2026-08-19,
+were replaced by the Cedar policy as the one authority (Jonasz, 2026-08-19,
 [Cedar policy](operators/cedar-policy.md)).
 
 **The ask in the Input.** The Input once had a `sandbox` block. The
 manifest's `requires` replaced it. A module states what it can't run without,
-and the Input's `compositionPolicy` only narrows it
+and the Input's `compositionPolicy` narrows it and never widens it
 ([three-layer authorization](one-pager-three-layer-authz.md)).
 
 ## Open questions

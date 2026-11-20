@@ -1,8 +1,8 @@
 # Guest ABI v2
 
-This page is for people who write a guest toolchain or its glue. It states what the runtime requires of a module and what it provides, so you can build to the contract exactly. It assumes you know WIT and the component model; to write a function, start at [Write a module](wasm/write-a-module.md). Grants are on [Cedar policy](operators/cedar-policy.md), the Input on the [Input reference](operators/input-reference.md) and the manifest on [Module manifests](guests/module-manifests.md).
+This page is for people who write a guest toolchain or its glue. It states what the runtime requires of a module and what it provides, so you can build to the contract to the letter. It assumes you know WIT and the component model; to write a function, start at [Write a module](wasm/write-a-module.md). Grants are on [Cedar policy](operators/cedar-policy.md), the Input on the [Input reference](operators/input-reference.md) and the manifest on [Module manifests](guests/module-manifests.md).
 
-A guest is a WebAssembly component targeting a world of the WIT package `guestfn:function@1.0.0` ([`wit/guestfn-function.wit`](https://github.com/jonasz-lasut/guestfn/blob/main/wit/guestfn-function.wit)). The payload is Protobuf: `RunFunctionRequest` bytes in, `RunFunctionResponse` bytes out. The canonical ABI moves memory, so a guest has no allocator export. ABI v2 is the only ABI the runtime serves.
+A guest is a WebAssembly component targeting a world of the WIT package `guestfn:function@1.0.0` ([`wit/guestfn-function.wit`](https://github.com/jonasz-lasut/guestfn/blob/main/wit/guestfn-function.wit)). The payload is Protobuf: `RunFunctionRequest` bytes in, `RunFunctionResponse` bytes out. The canonical ABI moves memory, so a guest has no allocator export. ABI v2 is the one ABI the runtime serves.
 
 ## The world
 
@@ -18,9 +18,9 @@ world function {
 }
 ```
 
-- `run` handles one request. The host passes the caller's `RunFunctionRequest` and returns the guest's `RunFunctionResponse`. It decodes and encodes each of them once on the way and keeps every field, including one newer than the runtime's own copy of the proto, on every message of the function API. The bytes aren't the caller's or the guest's own, so a guest can't depend on their layout. The host leaves out the step credentials the module wasn't granted, and the pull credential in every case. `run` is `async`, so a guest may await its imports, `wasi:http` especially. The run's deadline applies while it does, less the time it waits for the host's HTTP answer. A sync-lifted `run` also satisfies the world, because the canonical ABI accepts a sync function where an async one is expected.
-- `log` is structured logging through the host, with typed values. The host attaches the module's identity to every line and renders it at the runtime's level of the same name. `debug` lines appear only under `--debug`.
-- The runtime typechecks `log-level` exactly, so `log` changes only with `2.0.0`.
+- `run` handles one request. The host passes the caller's `RunFunctionRequest` and returns the guest's `RunFunctionResponse`. It decodes and encodes each of them once on the way and keeps every field, including one newer than the runtime's own copy of the proto, on every message of the function API. The bytes aren't the caller's or the guest's own, so a guest can't depend on their layout. The host leaves out the step credentials the module wasn't granted, and the pull credential in every case. `run` is `async`, so a guest may await its imports, `wasi:http` among them. The run's deadline applies while it does, less the time it waits for the host's HTTP answer. A sync-lifted `run` also satisfies the world, because the canonical ABI accepts a sync function where an async one is expected.
+- `log` is structured logging through the host, with typed values. The host attaches the module's identity to every line and renders it at the runtime's level of the same name. `debug` lines appear under `--debug` alone.
+- The runtime typechecks `log-level` to the letter, so `log` changes with `2.0.0` alone.
 - `function-sync`, the package's second world, is this contract with `run` declared sync, for a toolchain that can't async-lift it. The runtime checks every guest against `function`.
 
 ## WASI and the sandbox
@@ -41,8 +41,8 @@ them (every scaffold and example was measured with `wasm-tools validate` on
 The sandbox allows:
 
 - no network sockets;
-- no filesystem beyond the granted private `/tmp`, the only pre-opened directory;
-- environment exactly as granted;
+- no filesystem beyond the granted private `/tmp`, the one pre-opened directory;
+- environment as granted, with nothing added;
 - `argv` is `["function"]`.
 
 The [three-layer decision](operators/cedar-policy.md) grants these capabilities. `limits` and the deadlines apply to every run. `limits.timeout` bounds the time of a run, not counting the time it waits for the host's HTTP answer. The request's gRPC deadline is the hard cap. Sleeping or blocking in another WASI call spends that budget too, and the run ends at the deadline whether the guest is executing or not. A component has no top-level memory export, and the host reserves nothing from `--max-total-run-memory` before the run. It charges the whole footprint as the guest claims its memories, and a growth the pool can't serve fails inside the run: `memory.grow` returns `-1`.
@@ -83,7 +83,7 @@ A module manifest declares `contract: wasm@1.0`, this world. Another version is 
 
 `guestfn:function@1.0.0` is the contract from function-wasm 1.0.0 on. The world's version moves on its own, by what a change asks of guests:
 
-- A 1.x minor may only add imports: a new interface or a new function. A component imports only what it uses. The runtime serves a guest built against an earlier 1.x unchanged. A guest that imports the addition declares the contract minor that added it, and a runtime that doesn't offer that contract refuses it by name.
+- A 1.x minor may add imports and nothing else: a new interface or a new function. A component imports what it uses and nothing more. The runtime serves a guest built against an earlier 1.x unchanged. A guest that imports the addition declares the contract minor that added it, and a runtime that doesn't offer that contract refuses it by name.
 - Within 1.x, `run`'s signature, the `log` import (the `log-level` cases included) and anything else already in the world stay as they are. Changing or removing any of them is `2.0.0`, a world every guest is rebuilt against.
 - A new field of `RunFunctionRequest` or `RunFunctionResponse` moves no world version. Payload evolution is Protobuf's.
 
@@ -113,7 +113,7 @@ world function {
 
 `guestfn wit update` bumps a guest to a published version. It installs the newest version of the major the guest's `include` declares, or the version `--version` names, and moves the version in the `include` in `wit/world.wit`. It also writes the WASI packages the world imports, at the versions the world declares, and everything those refer to, from `ghcr.io/webassembly/wasi`. `guestfn.lock` pins every package's digest. Regenerate any bindings you check in afterward. `--dir` names the project, and `--repository` and `--wasi-repository` name mirrors.
 
-With a `guestfn.lock` present, `guestfn build` pulls exactly the pinned digests into `wit/deps/` before it calls the toolchain, and a copy that changed is written back. `guestfn wit fetch` does the same for a build that doesn't go through `guestfn build`. A project with no lock keeps the copy it has.
+With a `guestfn.lock` present, `guestfn build` pulls the pinned digests, no others, into `wit/deps/` before it calls the toolchain, and a copy that changed is written back. `guestfn wit fetch` does the same for a build that doesn't go through `guestfn build`. A project with no lock keeps the copy it has.
 
 To fetch the package with [`wkg`](https://github.com/bytecodealliance/wasm-pkg-tools) instead, map the namespace in its configuration:
 

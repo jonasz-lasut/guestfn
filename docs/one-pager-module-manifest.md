@@ -8,8 +8,8 @@
   reference are a section here)
 
 A module declares what it needs in a manifest: the sandbox capabilities it
-can't run without and the schema of the `config` it reads, plus, advisory
-only, the kinds it composes. For an OCI artifact
+can't run without and the schema of the `config` it reads, plus, as advice alone, the kinds it
+composes. For an OCI artifact
 the manifest is a second layer of the artifact. A `Path` or `HTTP` source
 names its `guestfn.yaml` by reference. The runtime reads it before the run and fails
 fast, with a message that identifies the module and the refusing policy layer,
@@ -19,20 +19,20 @@ before anyone runs it, and `guestfn scaffold composition` writes the Input
 from it.
 
 A manifest never widens anything. It's the request of the
-[three-layer decision](one-pager-three-layer-authz.md), granted only where the
+[three-layer decision](one-pager-three-layer-authz.md), granted where the
 Input's `compositionPolicy` and the operator's `--sandbox-policy-file` both
-permit. The manual page is [Module manifests](guests/module-manifests.md).
+permit, and nowhere else. The manual page is [Module manifests](guests/module-manifests.md).
 
 ## Principles
 
-1. **A manifest is a request, never a grant.** Its only effects are an
+1. **A manifest is a request, never a grant.** Its effects stop at an
    earlier, clearer refusal, documentation and scaffolding. The composition
    and operator policy layers still grant, and either can refuse.
 2. **Beside the module, inside the artifact.** The manifest is a layer of the
    same OCI artifact as the module, so the manifest digest a Composition pins
    names it and a cosign signature of that digest covers it. The module bytes
-   are untouched, and nothing parses WebAssembly to find it (Wasmtime is the
-   only decoder of a module).
+   are untouched, and nothing parses WebAssembly to find it (Wasmtime alone
+   decodes a module).
 3. **Absent is fine.** A module without a manifest gets the default sandbox.
    Unknown top-level fields are ignored in a published manifest, and an
    unknown entry under `requires` fails closed.
@@ -81,8 +81,8 @@ Input's egress rules, so a request and a compiled grant compare like with
 like. `requires.env` binds variable names to step-credential keys and
 `requires.credentials` names the step credentials the module reads whole from
 its request. The values arrive at the pipeline step, never in the manifest,
-and the request the module receives contains only the credentials these two
-name: the runtime edits every other one out of it. `oras push
+and the request the module receives contains the credentials these two
+name and no others: the runtime edits every other one out of it. `oras push
 fn.wasm:application/wasm
 guestfn.json:application/vnd.guestfn.manifest.v1+json` produces the same
 artifact.
@@ -101,8 +101,8 @@ entry by the three-layer rule. Each egress rule (once per rule and method, so
 a policy can key on `context.method`), `filesystem.privateTmp`, each env
 binding (`setEnv` over the bound names, `spendCredential` per binding) and
 each required credential (`spendCredential`) must be permitted by the Input's
-`compositionPolicy` (scoped default-permit: it narrows only the actions it
-writes rules for) and by the operator's `--sandbox-policy-file`
+`compositionPolicy` (scoped default-permit: it narrows the actions it
+writes rules for and no others) and by the operator's `--sandbox-policy-file`
 (default-deny). Then `Manifest::check` holds the rest of the manifest against
 the run:
 
@@ -155,13 +155,13 @@ Composition author what the policy layers must permit.
 A `Path` source (a `.wasm` file under `--module-dir`) or an `HTTP` source (a
 file fetched by URL and digest) has no artifact to hold a layer, and an OCI
 artifact pushed without a manifest layer has none either. With no manifest the
-request is empty, so by the model's default-deny the module gets only the
-default sandbox. That's safe, but it leaves an operator who legitimately runs a
+request is empty, so by the model's default-deny the module gets the
+default sandbox and nothing more. That's safe, but it leaves an operator who legitimately runs a
 `Path` or `HTTP` module that needs egress, a private `/tmp` or a
 credential-sourced env var with no way to request it (tracked in
 [#30](https://github.com/jonasz-lasut/guestfn/issues/30)).
 
-A manifest is only a request. A manifest-less source misses nothing but a
+A manifest is a request, nothing more. A manifest-less source misses nothing but a
 place to put its `guestfn.yaml`: the document the module author already writes
 and `guestfn push` embeds, stored beside the module instead of inside the
 artifact. Such a source names it by reference:
@@ -189,7 +189,7 @@ module:
 - It arrives through the same `Resolver::manifest` call as an OCI manifest
   layer, so `admit_requires`, `Manifest::check` and `function validate
   --resolve` are unchanged. A referenced manifest meets the same three layers
-  as an embedded one, and it can only refuse a run earlier, never make one
+  as an embedded one, and it can refuse a run earlier, never make one
   possible. A file the runtime can't read or parse is a fatal result, `cannot
   read the manifest of module <desc>: …` or `module <desc> has an invalid
   manifest: …`.
@@ -198,8 +198,8 @@ module:
   is content-addressed by `manifestDigest` and kept in the blob store. A
   `manifestPath` manifest is read fresh on every request and never cached, so
   the local loop (`--module-dir` and `crossplane render`) reflects an edit
-  immediately.
-- `manifestPath` is allowed with `type: Path` only. An OCI artifact takes no
+  at once.
+- `manifestPath` is allowed with no type but `Path`. An OCI artifact takes no
   reference: its manifest is a layer.
 
 ### The `from` fence
@@ -210,7 +210,7 @@ location, as it must the module URL; otherwise the XR author could point the
 runtime at any host to `GET`. The refusal is `module.from: <field> of the
 composite resource names manifestURL "<location>", which the compositionPolicy
 does not permit (pullModule)`. A `manifestPath` has no host, so the fence
-doesn't apply to it, and it comes from the Input only: `module.from` can't set
+doesn't apply to it, and it comes from the Input alone: `module.from` can't set
 it, since an XR author chooses the module file, not what its manifest
 requests.
 
@@ -267,8 +267,8 @@ without it. These checks never read the composite resource.
   reversed 2026-08-17). The first design left environment values to the
   Composition. The three-layer change removed the Input's env fields, so the
   manifest is where a module declares its env contract: `requires.env` binds
-  a variable to a step-credential key, allowed only where `setEnv` and
-  `spendCredential` permit it in both Cedar layers.
+  a variable to a step-credential key, which `setEnv` and
+  `spendCredential` must permit in both Cedar layers.
 - **`requires` is hard.** An unmet entry refuses the run. An `optional: true`
   per rule can be added later without breaking anything.
 - **`config.schema` is enforced by the runtime**, not by `guestfn` alone. A
@@ -285,12 +285,12 @@ without it. These checks never read the composite resource.
 
 ## Alternatives
 
-- **Manifest-less means the default sandbox only.** The simplest option, and
-  it nudges everyone to OCI and `guestfn push`. Rejected as the only answer:
+- **Manifest-less means the default sandbox and nothing else.** The simplest option, and
+  it nudges everyone to OCI and `guestfn push`. Rejected as the answer by itself:
   it breaks the local loop for any module that needs egress, and a module
   hosted over HTTP has no path to a capability at all.
-- **An inline `request` block in the Input, valid only for manifest-less
-  sources.** The Composition would author the request for these sources only,
+- **An inline `request` block in the Input, valid for manifest-less
+  sources alone.** The Composition would author the request for these sources alone,
   so a module would have two possible request authors and two schemas to keep
   aligned.
 - **A sidecar `guestfn.yaml` discovered beside a `Path` module.** Rejected for

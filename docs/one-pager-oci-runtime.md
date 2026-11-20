@@ -12,8 +12,8 @@ kind of sandbox, Wasmtime. The code around the sandbox doesn't depend on
 it. The Input and its module sources, the module manifest, the policy
 layers, the credential withholding, the egress client, the fences, the
 caches, the signature check, `function validate` and the `guestfn` loop of
-init, build, push and inspect all work on bytes and references. Only the
-engine knows what a module is.
+init, build, push and inspect all work on bytes and references. The
+engine alone knows what a module is.
 
 This record adds a second runtime, `function-oci`, built from the same
 workspace. It runs an OCI image, any image, as the step's module, inside a
@@ -47,7 +47,7 @@ now (Jonasz, 2026-11-09). The status stays `draft` until the first
 - **Hardware isolation by default.** The image's code runs under its own
   guest kernel under a hypervisor. The guest can attack the hypervisor's
   surface, not the container runtime's.
-- **Only what the sandbox granted.** The VM has no network interface. The
+- **Nothing beyond the sandbox's grants.** The VM has no network interface. The
   manifest requests egress, env bindings and credentials, and both policy
   layers permit them, as today. A guest that ignores the proxy the init
   offers has no route at all.
@@ -62,7 +62,7 @@ now (Jonasz, 2026-11-09). The status stays `draft` until the first
 ## Non-goals
 
 - **Running the image as a plain container.** A container shares the host
-  kernel, and `function-oci` 0.1 runs on KVM only (decision 9).
+  kernel, and `function-oci` 0.1 runs on KVM alone (decision 9).
 - **A second ABI for WebAssembly.** The component world remains the one
   WebAssembly contract. The OCI contract is a gRPC server in the VM.
 - **Scaffolding and building the image.** The author writes the project
@@ -166,7 +166,7 @@ cosign signature covers both and the trust model doesn't change. The
 runtime finds the annotated layer in
 the manifest and reads that one small blob before it pulls the rest, so
 admission refuses before any layer comes down. An image with no such layer
-runs as a manifest-less module in the default sandbox, exactly as a bare
+runs as a manifest-less module in the default sandbox, as a bare
 `application/wasm` layer does. function-wasm refuses a module image by
 name, since the package for the OCI runtime serves it.
 
@@ -215,8 +215,8 @@ Firecracker is the sandbox for now (decision 8).
 
 **What boots.** The runtime unpacks the image's layers once per image
 digest, applies the whiteouts and preserves ownership and modes without
-root, into the form the sandbox boots from. For a VMM with block devices
-only, that form is a squashfs image, which the runtime writes
+root, into the form the sandbox boots from. For a VMM with nothing but block devices,
+that form is a squashfs image, which the runtime writes
 straight from the layer tarballs with its blocks packed with zstd
 (the packing of the root filesystem, after this paragraph); a VMM
 that shares files through virtio-fs takes a directory instead. The image config, with the user
@@ -284,7 +284,7 @@ new directory of the compiled store and no VM snapshot taken over one
 format meets a root filesystem written in the other.
 
 **One VM per request.** The runtime starts the VM with the kernel, the
-root filesystem read-only, a vsock device, memory sized to the step's
+root filesystem mounted without write access, a vsock device, memory sized to the step's
 `limits.memory` plus the kernel's share, one vCPU (`--vm-vcpus`) and
 the deadline. The init mounts the root filesystem with a tmpfs overlay,
 both `nosuid` and `nodev` like the fresh `/tmp`,
@@ -296,7 +296,7 @@ alone when the config doesn't set a user or sets the number 0, before it
 unpacks a layer.
 Before the exec the init empties the capability bounding set, clears the
 ambient, permitted, effective and inheritable sets and sets `no_new_privs`.
-The guest's only root is then the init. Dropping capabilities alone isn't
+The init is then the guest's sole root. Dropping capabilities alone isn't
 enough, because UID 0 can still write the cgroup file that caps the run's memory. Once the function's port accepts a
 connection the init bridges it to a second vsock connection, and the host
 calls `RunFunction` over that, bounded by the run's deadline and a limit on
@@ -320,7 +320,7 @@ kernel, the init and the overlay. The run slots, the fair scheduler by digest, t
 the step slots and the gRPC deadline cap apply unchanged, because they
 wrap `Engine::run`. A run's slot and its memory belong to the VM. An
 answered run keeps both after the response, until the runtime has reaped
-the VMM. The next VM starts only once the one before it's gone.
+the VMM. The next VM starts when the one before it's gone, not earlier.
 `runs_in_flight` counts the run until then, and `run_duration` observes
 it at the response, which is what a caller waits. The step slot is the
 runtime's and ends with the call. While the runtime stops one VM of a
@@ -496,7 +496,7 @@ package starts alpha, on its own tags and releases (decision 15).
 ## Alternatives
 
 - **gVisor as the sandbox.** A user-space kernel, with no KVM required on
-  its systrap platform, slower system calls and a software-only boundary.
+  its systrap platform, slower system calls and a boundary made of software alone.
   A later sandbox behind the same `Sandbox` trait if a cluster can't offer
   KVM.
 - **A libkrun prototype and a comparison.** A libkrun and a Firecracker
@@ -539,9 +539,9 @@ package starts alpha, on its own tags and releases (decision 15).
   annotated layer is that file, found through the manifest and read on
   its own.
 - **An ext4 image as the root filesystem.** The first draft's form for a
-  VMM with block devices only. A squashfs writer keeps the ownership
-  without root, and the guest mounts the image read-only under its
-  overlay, the read-only root the design describes. The build writes
+  VMM with block devices alone. A squashfs writer keeps the ownership
+  without root, and the guest mounts the image without write access under its
+  overlay, the unwritable root the design describes. The build writes
   squashfs.
 - **The VM's memory as the process's limit.** The first build sized the
   VM to `limits.memory` alone. Without swap the guest kernel thrashed its
@@ -663,7 +663,7 @@ The owner decided this the same day:
 
 9. **The development loop without KVM.** Firecracker has no macOS port,
    and a machine without KVM has no loop. 0.1 has no container fallback
-   and runs on KVM only.
+   and runs on KVM alone.
 
 The owner decided this on 2026-11-12:
 

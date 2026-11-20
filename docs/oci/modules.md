@@ -86,8 +86,8 @@ config:
 the version means.
 `oci.args` are the arguments for the function's binary: they replace the
 image's command and keep its entrypoint, as a Kubernetes container's `args`
-do. `oci.image` pins the image by digest; `guestfn push --image` writes it,
-so the file may leave it out. The other fields keep their meaning from
+do. `oci.image` pins the image by digest; `guestfn push --image` writes it, so
+the file may leave it out. The other fields keep their meaning from
 [Module manifests](../guests/module-manifests.md). The runtime refuses
 `requires.egress` for now: the VM has no network, and the proxy is a later
 phase of the design.

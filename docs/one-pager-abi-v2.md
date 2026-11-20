@@ -36,11 +36,11 @@ The move brings these with it:
   and pattern code the Go runtime wrote around cedar-go (the
   boundary-correct `Repository` hierarchy, `dialAddress` handling) ported
   across and now sits in `crates/function/src/authz.rs`.
-- The Wasmtime API the Go binding never exposed: parse-only inspection, a
-  pre-linked `InstancePre` per module so a run only instantiates, and the
+- The Wasmtime API the Go binding never exposed: parse-without-run inspection, a
+  pre-linked `InstancePre` per module so a run does nothing but instantiate, and the
   engine's pooled memory budget, which suit a fresh instance per request.
-- `guestfn` follows the runtime, since it links the engine for its verdicts,
-  so one move covered both.
+- `guestfn` follows the runtime, since it links the engine for its verdicts, so
+  one move covered both.
 
 ## What ABI v2 is
 
@@ -61,7 +61,7 @@ A guest is a component targeting the WIT world `guestfn:function@1.0.0`:
   refuses a core module at load.
 
 The world targets WASI 0.3 from the start (Jonasz, 2026-08-25), accepting
-young toolchains for early guests. `wasi:http@0.2` and `@0.3` are different
+young toolchains for the first guests. `wasi:http@0.2` and `@0.3` are different
 interfaces, so defining the world against 0.2 and lifting it later would
 have meant cutting two worlds and designing the streams and budgets twice.
 Wasmtime enabled component-model async by default in v46, so the host had
@@ -122,7 +122,7 @@ deliberate re-record.
 ## Non-goals
 
 - A typed WIT mirror of the RunFunction messages.
-- A second world for WASI 0.2 alone. A toolchain that reaches only 0.2 would
+- A second world for WASI 0.2 alone. A toolchain that reaches 0.2 alone would
   need a second world defined, tested and kept consistent with the first.
 - Changing a guest-facing semantic during the port.
 

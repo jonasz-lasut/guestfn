@@ -17,7 +17,7 @@ Budget a pod's memory as the sum of three terms:
 ## Cold start
 
 A cold start compiles every module once. `--module-size-limit` bounds a
-compile's input, `--max-concurrent-compiles` how many run at once (each
+compile's input, `--max-concurrent-compiles` the number that run at once (each
 about 1 GB at peak for a large Go module, per Measurements) and
 `--module-compile-timeout` how long one may take. The request's own deadline
 doesn't cut a compile short, so leave `--max-concurrent-compiles` times that
@@ -29,7 +29,7 @@ Disk grows by one module and one compiled artifact per digest ever served, until
 
 ## Throughput
 
-Runs execute in parallel up to `--max-concurrent-runs` and a step's `limits.concurrency`. The `--max-total-run-memory` pool bounds how many can hold their memory at once, as [runtime flags](../operators/runtime-flags.md) describes. A large observed state costs on every request whatever the guest is.
+Runs execute in parallel up to `--max-concurrent-runs` and a step's `limits.concurrency`. The `--max-total-run-memory` pool bounds the number of runs that reserve memory at once, as [runtime flags](../operators/runtime-flags.md) describes. A large observed state costs on every request whatever the guest is.
 
 ## Measurements
 
@@ -44,4 +44,4 @@ The figures below were measured on 2026-08-16 on linux/arm64, on the Go host wit
 | on disk per module version | ~230 MB (module + artifact) | ~60 MB | 0.9 MB |
 | load from a warm volume | 6-8 ms | 2 ms | 0.05 ms |
 
-"Go" is the go scaffold and "Go, raw proto" a Go guest that uses only the scaffold's own code, without `function-sdk-go`. The full model of bounds and budgets is in [the resource governance one-pager](../one-pager-resource-governance.md).
+"Go" is the go scaffold and "Go, raw proto" a Go guest that uses the scaffold's own code alone, without `function-sdk-go`. The full model of bounds and budgets is in [the resource governance one-pager](../one-pager-resource-governance.md).

@@ -2,11 +2,11 @@
 
 This page is for operators of function-wasm. It shows how to write the Cedar
 policy that `--sandbox-policy-file` loads, mount it into the function's pod and
-check it offline with `function validate`. It covers the operator layer only:
+check it offline with `function validate`. It covers the operator layer alone:
 the schema and how each layer decides are in the
 [Cedar policy reference](cedar-policy.md).
 
-The policy file is the only thing that enables a sandbox capability. A module's manifest requests a capability and the Input's `compositionPolicy` can narrow it, but neither can grant more than the operator's policy does.
+The policy file alone enables a sandbox capability. A module's manifest requests a capability and the Input's `compositionPolicy` can narrow it, but neither can grant more than the operator's policy does.
 
 Evaluation is default-deny: a capability is refused unless a `permit` matches it, and a `forbid` overrides a `permit`. Without a `--sandbox-policy-file`, no capability is grantable and every module runs in the default sandbox, which has nothing but the request. A file that permits one capability still refuses every other one, so permit each capability you mean to allow.
 
@@ -25,7 +25,7 @@ The principal's attributes, and the resources and context of each action, are in
 
 ## Write the policy
 
-This policy lets only `team-a` use a private `/tmp`, and lets any
+This policy lets `team-a` alone use a private `/tmp`, and lets any
 namespace reach `*.example.com` with GET:
 
 ```cedar
@@ -79,7 +79,7 @@ The principal comes from `--xr`. Without it, the zero principal matches no per-t
 
 ## Fence what modules compose
 
-`composeResource` isn't a capability. It's a ceiling on what any module may compose, judged over the response after the run. It applies only where a rule scopes it. Otherwise every module's output is applied unchanged.
+`composeResource` isn't a capability. It's a ceiling on what any module may compose, judged over the response after the run. It applies where a rule scopes it and nowhere else. Otherwise every module's output is applied unchanged.
 
 A `forbid` that specifies the action scopes it and permits nothing. A ceiling written that way needs a `permit` beside it. A `forbid` with an unconstrained action, `forbid (principal, action, resource) when { … };`, needs none: the layer refuses what it matches and permits the rest ([Cedar policy reference](cedar-policy.md)). This policy refuses RBAC resources and Secrets and permits everything else:
 
@@ -92,7 +92,7 @@ permit (principal, action == Action::"composeResource", resource);
 
 ## Fence what modules read
 
-`requireResource` is the same kind of ceiling over what any module may ask Crossplane for through the response's `requirements`, judged over the selectors after the run and only where a rule scopes it. This policy keeps Secrets off limits, lets a module read its own namespace and opens the cluster-scoped Crossplane kinds:
+`requireResource` is the same kind of ceiling over what any module may ask Crossplane for through the response's `requirements`, judged over the selectors after the run. It applies where a rule scopes it and nowhere else. This policy keeps Secrets off limits, lets a module read its own namespace and opens the cluster-scoped Crossplane kinds:
 
 ```cedar
 forbid (principal, action == Action::"requireResource", resource)

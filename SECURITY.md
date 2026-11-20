@@ -14,7 +14,7 @@ is published.
 
 ## Supported releases
 
-Through 0.x only the latest release line receives fixes; upgrade to the
+Through 0.x the latest release line alone receives fixes; upgrade to the
 latest release to get one. From 1.0.0 on, an older release line can be
 patched on request.
 
@@ -60,7 +60,7 @@ The guests under `examples/` illustrate the guest languages. Four of them,
 under `ghcr.io/jonasz-lasut/guestfn/examples/` (`wasm-rust`, `wasm-ts`,
 `wasm-go`, `oci-go`), so a Composition can
 reference them. The runtime images contain no example code, and both
-packages embed only the example manifests of `examples/function-wasm-go/example`.
+packages embed the example manifests of `examples/function-wasm-go/example` and nothing else.
 Renovate refreshes the examples' dependencies in a monthly batch that merges
 once the end-to-end suite passes, and its vulnerability pull requests against
 them merge when their checks pass. The maintainers dismiss an alert against

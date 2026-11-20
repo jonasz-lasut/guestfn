@@ -55,8 +55,8 @@ After the run, over the response the runner decoded for the output fence,
 the runtime reads every `ResourceSelector` in `requirements.resources` and
 in the deprecated `requirements.extra_resources`. Crossplane still serves
 the deprecated map, and a module could otherwise use it to step around the
-fence. The selectors of each map come in key order, the current map first,
-so the first refusal is the same on every reconcile. The response's bytes
+fence. The selectors of each map come in key order, the current map first, so
+the first refusal is the same on every reconcile. The response's bytes
 don't change.
 
 A selector with no `apiVersion` or no `kind` matches no rule. Where a layer
@@ -88,7 +88,7 @@ fetched for a selector the runtime permitted on the previous call.
 
 Both layers judge the action as they judge `composeResource`:
 
-- scoped default-permit in each layer: a layer narrows the reads only where
+- scoped default-permit in each layer: a layer narrows the reads where
   one of its rules spells the action, and a `forbid` alone permits nothing
 - the composition layer first and whole, then the operator's, with the
   refusal stating the layer
@@ -228,7 +228,7 @@ permits from it.
 
 - `authz.rs`: the hierarchy over `Kind` and `Group` for the new action and the
   three context attributes with and without `has`. It also covers a `forbid` by
-  itself and the operator layer scoping only when a rule spells the action. -
+  itself and the operator layer scoping when a rule spells the action and not before. -
   `require.rs`: both maps in key order and the core group. It also covers a
   selector with no kind and a response with no requirements.
 - `admission.rs`: the layer stated in each sentence, and an unscoped layer

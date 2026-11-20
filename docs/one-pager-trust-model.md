@@ -23,17 +23,17 @@ below closes both. The operator-facing summary is the manual's
   `limits` of the run, and passes `config`. The `compositionPolicy` is their
   own Cedar layer: it fences the modules an XR may choose and may narrow
   sandbox capabilities. They're trusted with the request their step receives,
-  exactly as the author of a native function's Composition is.
+  as the author of a native function's Composition is.
 - A **composite resource author** may, when the Composition says so
   (`module.from`), choose which module runs by writing a field of their XR.
   They're trusted with less. They can pick code within the `pullModule` permits
   of the `compositionPolicy` but can't widen what it may do or spend what it may
-  not. The runtime reads `compositionPolicy` and `limits` from the Input only.
+  not. The runtime reads `compositionPolicy` and `limits` from the Input alone.
 - A **module author** publishes signed or unsigned artifacts and declares in
   the manifest what the module can't run without (`requires`), the step
   credentials it reads among them. Their code runs in the sandbox with the
-  request less the step credentials it wasn't granted. A manifest can only
-  make a run fail earlier, never widen it.
+  request less the step credentials it wasn't granted. A manifest can make
+  a run fail earlier, never widen it.
 - A **signer**, for a keyless signature, is the OIDC identity the certificate
   names. The operator decides per repository which issuer and identity may
   vouch for a module (`trustSigner` rules).
@@ -56,8 +56,8 @@ the runtime verifies every fetch before it stores or compiles it, so nothing
 that runs can change without the Composition (or the XR field it delegated
 to) changing.
 
-With `--cosign-key`, only OCI modules carrying a valid signature run, and
-`http` and `path` sources are refused. Verification is a precondition of
+With `--cosign-key`, an OCI module with a valid signature runs, and
+unsigned ones, `http` and `path` sources are refused. Verification is a precondition of
 running, checked once per repository and digest per process before the runtime looks in any
 cache tier, so a runtime with a key never serves an artifact that a runtime
 without one (or with a since-rotated key) left on a shared or persisted
@@ -71,17 +71,17 @@ the module's manifest. The runtime lists the referrers through the
 registry's referrers API, or through the `sha256-<hex>` index of the
 referrers tag schema where the API answers 404 (GHCR, `registry:3`), over its
 own registry client with the pull's credentials. Because the listings aren't
-pinned, a referrer counts only if its subject is the pinned digest, and the
+pinned, a referrer whose subject isn't the pinned digest doesn't count, and the
 runtime fetches the bundle with a size bound and verifies it against its
 digest.
 
 A module is signed when an envelope signature over the DSSE
 pre-authentication encoding verifies and the statement it signs is a cosign
 signature (`predicateType` `https://sigstore.dev/cosign/sign/v1`) whose
-subject is the manifest digest. The runtime reads the statement only after
-the signature verifies. Other attestations, such as SLSA provenance, never
+subject is the manifest digest. The runtime reads the statement after
+the signature verifies, never before. Other attestations, such as SLSA provenance, never
 count, whichever key signed them. cosign 2's legacy `sha256-<hex>.sig`
-signature isn't read: a module signed only that way is unsigned to this
+signature isn't read: a module signed that way alone is unsigned to this
 runtime until it's re-signed with cosign 3.
 
 ### Key-based and keyless bundles
@@ -94,8 +94,7 @@ takes the signing time from the bundle's RFC 3161 timestamps and its Rekor
 entry's signed entry timestamp (a source that's present but fails is fatal,
 with no fallback to the clock). It verifies the inclusion proof and
 checkpoint, then chains the certificate to a Fulcio authority at that time.
-Only then is the
-statement read, under the same rules as a key-based bundle's. The signer is
+The statement is read after that, never before, under the same rules as a key-based bundle's. The signer is
 then held to the operator's `trustSigner` rules, in the policy file that
 requires the signature: `context.issuer` and `context.identity` over the
 repository hierarchy, default-deny, so a trusted root alone admits nothing.
@@ -171,7 +170,7 @@ compositionPolicy: |
   HTTP source: an unfenced XR author could point the runtime at any host and
   read what its answer says.
 - `spendCredential`: the step credentials an XR-chosen object may name,
-  spent only on a ref `pullModule` admits. The pull check runs first, so a
+  spent on a ref `pullModule` admits and on no other. The pull check runs first, so a
   permitted credential never goes to a host the Composition didn't admit,
   and `context.repository` lets a permit co-locate credential and
   repository. With no matching permit there is none, and the credential is a
@@ -186,7 +185,7 @@ trusted with it. `crates/function/src/from.rs` applies the rule, judged by
 The credential that pulled the module is the host's. The runtime removes it
 from the request before the guest sees it, and refuses a manifest that binds
 it to an env variable or requires it whole. Of the step's other credentials
-the guest receives only those granted to it: each one its manifest names (a
+the guest receives those granted to it and no others: each one its manifest names (a
 `requires.env` binding's credential, or one it reads whole through
 `requires.credentials`) and both Cedar layers permit (`spendCredential`: the
 composition layer's scoped default-permit and the operator's default-deny).
@@ -200,10 +199,10 @@ result before the run, as an env binding's is.
 
 Declaring a credential for the step doesn't hand it to every module that
 runs there: `spendCredential` keeps a secret from a module, not
-only out of its environment (issue #122, 2026-10). A granted credential can
-leave only where egress is granted. Without a grant the module has no
-network. With one it reaches only the hosts its manifest listed within both
-Cedar layers, a grant that's the policy layers' alone, so nothing an XR
+out of its environment alone (issue #122, 2026-10). A granted credential can
+leave where egress is granted and nowhere else. Without a grant the module has no
+network. With one it contacts the hosts its manifest listed within both
+Cedar layers and no others, a grant that's the policy layers' alone, so nothing an XR
 author writes widens where a credential may go.
 
 ## The guest's request and sandbox
@@ -213,19 +212,19 @@ it wasn't granted (the pull credential always): observed and desired state,
 context, extra resources, `config`, and the credentials its manifest names
 that both Cedar layers permit. It runs in a fresh Wasmtime store with WASI
 0.3 and 0.2 and no sockets. It has two ways out: the typed `log` import and
-`wasi:http`. The host performs `wasi:http` only within an egress grant its
+`wasi:http`. The host performs `wasi:http` within an egress grant its
 manifest requires and both Cedar layers permit (`grantEgress`), and refuses it
 otherwise. A wall-clock deadline and a memory cap over linear memories and
 tables bound the run, and stdout and stderr go to the pod's log.
 
 The guest has no pre-opened directories and no environment unless its
 manifest's `requires` asks and the policy layers permit. Then it gets a
-private `/tmp` created for the request and removed after it, and exactly the
-environment variables its bindings resolve from step credentials, never the
-runtime's own. The private `/tmp` is the only directory a module ever gets:
+private `/tmp` created for the request and removed after it, and an
+environment holding the variables its bindings resolve from step credentials
+and nothing of the runtime's own. The private `/tmp` is the one directory a module ever gets:
 host directories aren't mountable by design (a module's inputs come through
 the request), so no operator path is readable by a module. The runtime reads
-the policy layers from the Input and the operator's file only, so an XR
+the policy layers from the Input and the operator's file alone, so an XR
 author can't widen them.
 
 Everything the module produces leaves in the response, which the host
@@ -268,14 +267,14 @@ sandbox's own security fixes alone.
 | registry or CDN serves other bytes | manifest verified against the reference, layer against the manifest, module against the layer digest, twice (registry client, host) |
 | tampered cache volume | blobs verified against their name on every read; artifacts validated by Wasmtime; signature checked before any tier |
 | XR author aims a credential at their host | refused unless a `compositionPolicy` `spendCredential` permit names the credential and a `pullModule` permit admits the host |
-| XR author widens the policy, limits or sandbox through the XR | impossible: `compositionPolicy` and `limits` are top-level Input fields, the runtime reads only `module.from` from the XR, and the sandbox is the manifest's ask under both Cedar layers |
+| XR author widens the policy, limits or sandbox through the XR | impossible: `compositionPolicy` and `limits` are top-level Input fields, the runtime reads `module.from` from the XR and nothing else, and the sandbox is the manifest's ask under both Cedar layers |
 | XR author picks unsigned code | `--cosign-key` or a `requireSignature` rule refuses it |
-| module reads or exfiltrates a step credential | a module sees only the step credentials its manifest names and both Cedar layers permit (`spendCredential`); the runtime edits every other one, the pull credential always, out of its request before the module runs. No network by default. Where both Cedar layers permit egress (`grantEgress`) a module reaches only the hosts, methods and paths its own manifest's `requires.egress.http` rules declare, over a default block list covering loopback, link-local, private and cluster ranges (`dialAddress` adds more). The runtime judges each resolved address and dials the checked one, and each request leaves an audit line with the module digest. A signature rule is strongly recommended wherever egress is granted |
+| module reads or exfiltrates a step credential | a module sees the step credentials its manifest names and both Cedar layers permit (`spendCredential`) and no others; the runtime edits every other one, the pull credential always, out of its request before the module runs. No network by default. Where both Cedar layers permit egress (`grantEgress`) a module may use the hosts, methods and paths its own manifest's `requires.egress.http` rules declare and none other. A default list of blocked ranges covers loopback, link-local, private and cluster ranges (`dialAddress` adds more). The runtime judges each resolved address and dials the checked one, and each request leaves an audit line with the module digest. A signature rule is strongly recommended wherever egress is granted |
 | module attacks the host | Wasmtime sandbox; host panics are caught into a fatal result |
 | module reads or writes host files | never: host directories aren't mountable into a module. A module gets at most its private `/tmp`, a fresh directory per request that's removed afterward. The filesystem behind `$TMPDIR` bounds it, and Wasmtime refuses `..` escapes inside the pre-open (`EPERM`) |
-| module reads the runtime's environment | never: the WASI environment is empty, or exactly the manifest's `requires.env` bindings resolved from step credentials the request already included |
+| module reads the runtime's environment | never: the WASI environment is empty, or the manifest's `requires.env` bindings resolved from step credentials the request already included and nothing more |
 | module starves the runtime | deadline, memory cap, compile slots, bounded tiers |
-| SSRF through `module.from` (`type: HTTP` or `OCI`) | a `compositionPolicy` `pullModule` permit is required for an XR-chosen network source. The runtime fetches only from repositories the Composition permitted; permits match a normalized location over the boundary-correct hierarchy and dot segments are refused, so a prefix can't be escaped; the runtime sends only GET requests, and follows a redirect of an HTTP download to another host only at an address outside the default block list; restrict the pod's egress with a NetworkPolicy where internal endpoints matter |
+| SSRF through `module.from` (`type: HTTP` or `OCI`) | a `compositionPolicy` `pullModule` permit is required for an XR-chosen network source. The runtime fetches from repositories the Composition permitted and from no others; permits match a normalized location over the boundary-correct hierarchy and dot segments are refused, so a prefix can't be escaped; the runtime sends GET requests and no other method, and follows a redirect of an HTTP download to another host at an address outside the default block list, never to one inside it; restrict the pod's egress with a NetworkPolicy where internal endpoints matter |
 | decompression bomb in a tar layer | extraction bounded at eight times the module size limit |
 
 ## Alternatives
@@ -283,8 +282,8 @@ sandbox's own security fixes alone.
 **Forward every step credential.** The runtime's first versions, like a
 native function, forwarded every step credential but the pull credential. That made
 `spendCredential` gate a convenience: a module denied an env binding still
-read the key from its request. The runtime forwards only what the module was
-granted.
+read the key from its request. The runtime forwards what the module was
+granted and nothing else.
 
 **Verify key-based bundles through the keyless verifier.** One verification
 path would be simpler, but `sigstore-verify` refuses a public-key bundle

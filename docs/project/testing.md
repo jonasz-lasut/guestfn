@@ -29,7 +29,7 @@ skip into a failure.
 | an Input rule, a refusal, a policy decision | a unit test beside the code, a fixture under `crates/function/testdata/validate/` and a conformance golden |
 | a scaffold change | the template, then `UPDATE_GOLDENS=1 cargo test -p guestfn`; the guest suite builds the goldens |
 | a fixture or stand-in a test needs | `guestfn_engine_wasm::testing` for a guest component, `guestfn_runtime::testing` for a registry, a signer, an in-process runtime, a server or a policy (both behind the `testutil` feature) |
-| something only Crossplane shows, such as a condition, an event, a resolved `requirements` entry, a pod restart or a scraped metric | a feature in the end-to-end suite |
+| something that Crossplane alone shows, such as a condition, an event, a resolved `requirements` entry, a pod restart or a scraped metric | a feature in the end-to-end suite |
 
 `UPDATE_GOLDENS=1 cargo test -p function-wasm --test conformance` records a
 conformance golden. A re-record is a behaviour change, so say so in the commit.
@@ -87,8 +87,8 @@ the suite's own setup binary, in three steps:
    the package, the `wasm` profiles' runtime configs and the lifecycle
    cache volume.
    The test module as a process is built in a `rust` container on any host
-   but Linux. `make e2e.up` builds it every time, and `cargo` rebuilds only
-   what changed. A path given in `E2E_OCI_GUEST` names a prebuilt binary,
+   but Linux. `make e2e.up` builds it every time, and `cargo` rebuilds what
+   changed and nothing else. A path given in `E2E_OCI_GUEST` names a prebuilt binary,
    which `make e2e.up` uses unchanged.
 
 `make e2e.wasm-profile.<p>` and `make e2e.oci-profile.<p>` run one profile's
@@ -125,7 +125,7 @@ and the published examples, and grants the egress, credential, env and private
 and the tests are in `crates/e2e/tests/wasm_default.rs`.
 
 The `strict` profile has no verifier. Its policy requires a signature for the
-plain variant only and grants egress to the registry host with no
+plain variant alone and grants egress to the registry host with no
 `dialAddress` hole. It also scopes `requireResource` to the tenant's own
 namespace. Its tests cover the no-verifier refusal, the block list refusing
 the service CIDR in band, the env, credential and `/tmp` refusals, and the
@@ -157,7 +157,7 @@ The Guest XR is the composite resource the suite creates for each test, and its
 
 | Field | What the module does |
 |---|---|
-| `nopResources`, `readyAfterSeconds` | composes that many provider-nop `NopResource`s, Ready after the delay, and marks each ready once its observed counterpart is |
+| `nopResources`, `readyAfterSeconds` | composes that number of provider-nop `NopResource`s, Ready after the delay, and marks each ready once its observed counterpart is |
 | `egress.url` | sends a GET request to the URL through `wasi:http` and writes the status and body, or the host's refusal, to `status.egress` |
 | `env`, `credentials` | writes those variables and the keys of those step credentials to status |
 | `privateTmp` | writes and reads back a file under `/tmp`, reporting the outcome |
@@ -287,7 +287,7 @@ A pull request's run uses the pull request's own copy of the three workflow
 files, so a change to them is exercised before it merges, and
 `.github/CODEOWNERS` names the owner as the code owner of
 `.github/workflows/` for that reason. A pull request from a fork gets a
-read-only token without secrets, which is all the jobs use.
+token that can't write, without secrets, which is all the jobs use.
 
 Every job of every workflow has a `timeout-minutes`, so a hung cluster, VM
 or download ends its job.
@@ -302,8 +302,8 @@ profile job restores. Because the jobs that save a cache are the jobs that
 restore it, the keys can't drift apart.
 
 A cache key reads the compiler, the runner and the dependency files, never
-the sources, so a push to `main` runs only the builds whose key it can have
-changed. The workflow's `changes` job lists the files the push touched. A
+the sources, so a push to `main` runs the builds whose key it can have
+changed and skips the rest. The workflow's `changes` job lists the files the push touched. A
 manifest, a lockfile or a toolchain file among them selects the builds that
 read it: the Rust builds, the WebAssembly examples or the process guest. A
 push that touches none runs nothing.
@@ -347,13 +347,13 @@ it by hand on any ref.
 The Makefile's `CROSSPLANE_VERSION` default names the current version. The
 workflow's `env` (`CROSSPLANE_PREVIOUS`, `CROSSPLANE_OLDEST`) pins the latest
 patch of the two older minors. A red version blocks the release: the release
-process pushes the branch, waits for the matrix and tags only when it's green.
+process pushes the branch, and a tag follows once the matrix is green.
 
 On a `function-oci` branch the matrix also runs the OCI engine's VM suite
 (`make oci.test`) on nine pairs: the three most recent Firecracker minors against the three guest kernel
 lines Firecracker supports (6.18, 6.1 and 5.10). The Dockerfile's pins are the
-current Firecracker and kernel, and the workflow's `env` pins the others. Only
-the pair the image pins blocks a release, and any other pair that fails stays
+current Firecracker and kernel, and the workflow's `env` pins the others. The pair the image pins
+alone blocks a release, and any other pair that fails stays
 out of the record. A last job writes what the released function passed to a
 `tested-versions` artifact: the function, the Crossplane versions and, for
 `function-oci`, the pairs. The release skills use it to open the pull request

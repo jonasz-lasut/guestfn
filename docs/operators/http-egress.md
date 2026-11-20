@@ -12,7 +12,7 @@ roots. A request the runtime doesn't perform is a transport error that
 states the reason, never a trap, and any status from the server is a
 response.
 
-A request is allowed only when all three layers agree:
+A request is allowed when all three layers agree, and in no other case:
 
 1. The operator's Cedar policy enables egress.
 2. The module's manifest lists the hosts, methods and paths it needs.
@@ -23,7 +23,7 @@ A request is allowed only when all three layers agree:
 With egress on, a module can send any host it's granted whatever its request
 contains, including the step credentials granted to it. A `grantEgress`
 permit that matches any host grants every public host. Grant narrowly, prefer `pathPrefix` in the manifest's rules, and pair the
-capability with `--cosign-key` so only modules your organisation signed run
+capability with `--cosign-key` so modules your organisation signed alone run
 (see [signatures](signatures.md)).
 
 ## Enabling egress
@@ -66,7 +66,7 @@ The schema and the refusal sentences are in the
 ## Budgets
 
 Each run has fixed budgets: `timeout` 10 seconds, `maxRequests` 16,
-`maxResponseBytes` 4 MiB and `maxRedirects` 5. Only the rate limit is
+`maxResponseBytes` 4 MiB and `maxRedirects` 5. The rate limit alone is
 tunable, through `--egress-rate-limit-per-minute` and
 `--egress-rate-limit-burst`.
 
@@ -116,7 +116,7 @@ address to judge it.
 
 The manifest's `requires.egress.http` rules (see
 [module manifests](../guests/module-manifests.md)) are what the module requests. Each
-rule has exactly one of `host` (an exact name) and `hostPattern`
+rule has one of `host` (an exact name) and `hostPattern`
 (`*.example.com`: every name under it, not the apex), at least one of
 `GET HEAD POST PUT PATCH DELETE OPTIONS`, and an optional `pathPrefix` the
 normalized path must start with.
@@ -134,7 +134,7 @@ requires:
 ```
 
 The runtime checks every request and every redirect hop against these rules.
-The Input's `compositionPolicy` narrows them only when it scopes
+The Input's `compositionPolicy` narrows them when it scopes
 `grantEgress`, and a rule is then refused unless one of its permits matches it.
 When an XR author picks a module through `module.from`, the module's manifest
 comes with it, and both Cedar layers still gate every rule it declares.

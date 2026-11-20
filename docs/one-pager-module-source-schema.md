@@ -45,12 +45,12 @@ optional. A document of the group of 0.6 and earlier,
 (`input::renamed_group`, see [Compatibility](contract/compatibility.md)).
 
 Everything but `module` (and within it, the object `from` names) is read from
-the Input only, never through `module.from`: an XR author may choose the
+the Input alone, never through `module.from`: an XR author may choose the
 module but may not widen its permissions, grants or budget. The Input has no
 `sandbox` subtree. A module requests anything beyond the default sandbox in
-its manifest's `requires`. The runtime grants a capability only when the
+its manifest's `requires`. The runtime grants a capability when the
 manifest, the `compositionPolicy` and the operator's `--sandbox-policy-file`
-all permit it ([three-layer authorization](one-pager-three-layer-authz.md)).
+all permit it, and not otherwise ([three-layer authorization](one-pager-three-layer-authz.md)).
 `function validate` refuses an Input with the removed `policy`
 or `sandbox` field and names the replacement (`the Input's policy field was
 removed: …`, `the Input's sandbox field was removed: …`).
@@ -60,29 +60,29 @@ removed: …`, `the Input's sandbox field was removed: …`).
 A source is chosen in one of two places: the Composition author writes it
 into the Input, or an XR author names it in a field of the composite resource.
 Rules that depend on where a source came from (an XR-chosen source may reference a
-credential only where the Composition permits it, and only inside an allowed
-registry) belong in the structure of the schema. A `type` discriminator
+credential where the Composition permits it and inside an allowed
+registry, never elsewhere) belong in the structure of the schema. A `type` discriminator
 next to a typed object is the Crossplane idiom, and `from` is an orthogonal
 switch on it:
 
 - `module.type` says what kind of source the step runs. The Composition author
-  always chooses the kind, an XR author only the instance.
-- Exactly one of the typed object (`oci`, `http`, `path`) or `from` is set,
+  always chooses the kind, an XR author the instance alone.
+- One, and no more, of the typed object (`oci`, `http`, `path`) or `from` is set,
   and no object of another type may be present. The runtime checks it on
   every request. Three CEL rules on the `module` object say the same for
   tooling that reads the schema (`crossplane resource validate`, IDEs), such
   as `self.type == 'OCI' ? (has(self.oci) != has(self.from)) : !has(self.oci)`
   and its two siblings. Crossplane never installs a function's Input CRD (an
   Input is a fragment of a Composition), so the runtime is the
-  only gate that always runs: `admission::admit` and `from::from_composite`
+  one gate that always runs: `admission::admit` and `from::from_composite`
   apply every rule the CRD under `package/wasm/input/` states.
 - The Composition-owned rules are top-level siblings of `module`, never read
   from the XR. The CRD's CEL requires a non-empty `compositionPolicy` when
   `module.from` names an OCI or HTTP source.
 - `limits` is the other top-level sibling.
 - An object read through `from` may reference a
-  credential only where the `compositionPolicy` permits `spendCredential`,
-  and only for a ref a `pullModule` permit admits. The XR can't bypass that rule,
+  credential where the `compositionPolicy` permits `spendCredential`
+  and for a ref a `pullModule` permit admits, never otherwise. The XR can't bypass that rule,
   because the policy never comes from the XR.
 
 ## `module.from` and `allowEmpty`
@@ -101,9 +101,9 @@ composite resource: module: no such field`).
 returns the request's desired state and context unchanged, built at the wire
 level from the caller's own bytes and counted as
 `requests_total{outcome="skipped"}`. A field that's set is read, fenced and
-run exactly as without it. `allowEmpty` is read from the Input only and
+run as without it. `allowEmpty` is read from the Input alone and
 refused without `from`: the Composition author chooses whether a step may be
-left empty, the composite resource only whether that step is (issue #82). It
+left empty, the composite resource whether that step is (issue #82). It
 serves the reserved hook of the first use case ([use cases](use-cases.md))
 before any tenant fills it in, and a smoke test of a deployed runtime that
 doesn't need a module built.
@@ -132,8 +132,8 @@ XR-chosen source it's a required, default-deny fence. The XR's `oci.ref` (or
 `http.url`), normalized, must be permitted by a `pullModule` rule over the
 `Repository` hierarchy. A named credential also needs a `spendCredential`
 permit, whose `context.repository` contains the ref's location so both halves
-co-locate. For sandbox actions it only narrows, and only where it scopes the
-action. A static source skips the fence: the Composition named it and is
+co-locate. For sandbox actions it narrows and does nothing else, and it
+narrows where it scopes the action. A static source skips the fence: the Composition named it and is
 trusted with it. The XR keeps choosing the artifact; the Composition keeps
 choosing where from and with what. The same field serves signature-free
 deployments that still need to fence tenants to a registry.
@@ -163,12 +163,12 @@ loads an OCI manifest layer, so the three-layer decision is identical. For a `mo
 The ceilings are global (`--module-timeout`, `--module-memory-limit`), so a
 trusted internal module and a tenant's labelling module would get the same
 budget. The operator sets the ceiling and the Composition requests less, so
-the Input has a top-level `limits`, read from the Input only (an XR author
+the Input has a top-level `limits`, read from the Input alone (an XR author
 must not widen a budget). `admission::admit` checks each value against its
 flag at request time. Asking for more is a fatal result that quotes both
 (`limits.memory 1Gi exceeds the runtime's --module-memory-limit of 512Mi`);
 asking for less narrows that run's epoch deadline and memory limiter in the
-engine's `RunOptions`. Raising a limit past the ceiling remains operator-only.
+engine's `RunOptions`. Raising a limit past the ceiling remains the operator's call.
 A Composition author who sets limits with little headroom gets fatal results
 the operator didn't cause. The benefit is a shared runtime where the loudest
 module can't spend the whole ceiling.
@@ -176,7 +176,7 @@ module can't spend the whole ceiling.
 ## Alternatives
 
 Optional fields under `module` (`oci`, `http`, `path` and a `*From`
-pointer for each) with a CEL rule that exactly one is set would work. It
+pointer for each) with a CEL rule that one, and no more, is set would work. It
 presents every source kind twice. Each new kind adds two fields, and the
 policy fields would still have no home.
 

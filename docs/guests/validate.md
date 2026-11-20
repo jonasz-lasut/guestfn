@@ -5,7 +5,7 @@ before the first reconcile, whether the runtime admits a Composition's
 function-wasm steps. It covers `function validate`, the `validate` subcommand of
 the runtime binary. It doesn't run a module.
 
-Crossplane never installs a function's Input CRD, so the runtime is the only
+Crossplane never installs a function's Input CRD, so the runtime is the one
 gate an [Input](../operators/input-reference.md) passes. `function validate`
 runs that gate offline. It applies the same checks to every function-wasm step
 of the Compositions (or bare `Input` documents) you give it.
@@ -38,12 +38,12 @@ The refusal is the runtime's own sentence, so a message you find here is the one
 By default `validate` checks the Input alone: the `compositionPolicy` compiles, `limits` stay within the ceilings, and the `module` source is well formed. These flags change the check or its output.
 
 - `--resolve` resolves and fetches each module. It checks the signature against `--cosign-key` and compiles the module with Wasmtime for the runtime's own verdict on size, ABI and host imports. It then decides the manifest's `requires` as the runtime does, and lists on a `credentials:` line the step credentials the module's request would contain. With none listed, the module receives none. OCI pulls use the local Docker config and never a step credential. When the module's [manifest](module-manifests.md) declares a kind in `composes` that a policy layer would refuse, the step gets a warning such as `the module declares it composes core/Secret (add), which the compositionPolicy does not permit (composeResource)`.
-- `--xr xr.yaml` materializes `module.from` sources against that composite resource, as the observed XR would. Without it, a `from` source is checked only for the `compositionPolicy` it requires, and a field the XR leaves unset under `module.allowEmpty` is reported as no module.
-- `--function-name` keeps only the steps of one function.
+- `--xr xr.yaml` materializes `module.from` sources against that composite resource, as the observed XR would. Without it, a `from` source is checked for the `compositionPolicy` it requires and nothing else, and a field the XR leaves unset under `module.allowEmpty` is reported as no module.
+- `--function-name` keeps the steps of one function and drops the rest.
 - `--output json` prints one JSON object per step, one per line, for CI annotations.
 - `-` reads stdin.
 
-A step whose `compositionPolicy` scopes `composeResource` or `requireResource` ends its OK line's parenthesis with the action, as in `OK (path fn.wasm, compositionPolicy, composeResource)`. The policy fences the module's output or its reads, which only a run can judge, so `validate` reports the scoping and not a verdict.
+A step whose `compositionPolicy` scopes `composeResource` or `requireResource` ends its OK line's parenthesis with the action, as in `OK (path fn.wasm, compositionPolicy, composeResource)`. The policy fences the module's output or its reads, which a run alone can judge, so `validate` reports the scoping and not a verdict.
 
 ## Warnings and exit codes
 

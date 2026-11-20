@@ -9,10 +9,9 @@ considered are in the
 
 ## Module privileges
 
-A module is the code of the Composition author. It gets only what the
+A module is the code of the Composition author. It gets nothing beyond what the
 Composition's step and the operator's policy grant it. It sees the request's
-observed state, desired state and context. Of the step credentials, it sees only those
-granted to it: those its
+observed state, desired state and context. Of the step credentials, it sees the granted ones alone: those its
 [manifest](../guests/module-manifests.md) names in a `requires.env`
 binding or in `requires.credentials`, and that both Cedar layers permit
 through `spendCredential`. The runtime removes every other credential from
@@ -23,8 +22,8 @@ the host. The runtime never forwards it, whatever the manifest asks.
 
 The sandbox protects the runtime, and every other Composition sharing the
 Function, from a module that crashes, loops or exhausts memory. Beyond
-that, a module gets only what its manifest requests and both policy layers
-permit ([Cedar policy](cedar-policy.md)):
+that, a module gets nothing that its manifest omits or a policy layer
+refuses ([Cedar policy](cedar-policy.md)):
 
 - A private `/tmp` that exists for one request. Host directories can't be
   mounted.
@@ -41,8 +40,8 @@ the outer boundary, so scope it to what the modules should see.
 
 ## Modules chosen by an XR author
 
-With `module.from`, the XR author picks the module. Use it only where you
-trust XR authors to choose code, and limit the choice in two ways:
+With `module.from`, the XR author picks the module. Use it where you
+trust XR authors to choose code, and nowhere else. Limit the choice in two ways:
 
 - Permit sources with `pullModule` rules in the Input's
   `compositionPolicy`. `OCI` and `HTTP` sources need one. Without it, the XR
@@ -50,7 +49,7 @@ trust XR authors to choose code, and limit the choice in two ways:
 - Require signatures with `--cosign-key` or the keyless options in
   [Signatures](signatures.md).
 
-The runtime reads `compositionPolicy` and `limits` from the Input only,
+The runtime reads `compositionPolicy` and `limits` from the Input alone,
 never from the XR. An XR author can choose code but can't widen its
 permissions, grants or budget. The runtime enforces every rule on every request, because Crossplane never
 installs the Input's CRD. [`function validate`](../guests/validate.md) runs
@@ -58,9 +57,9 @@ the same checks over a Composition offline.
 
 ## Credentials and the registry pull
 
-A source read from the XR can specify a step credential only where a
+A source read from the XR can specify a step credential where a
 `spendCredential` permit matches it and a `pullModule` permit admits the
-repository. Otherwise the XR author would choose the registry host that
+repository, and nowhere else. Otherwise the XR author would choose the registry host that
 receives the secret. The runtime sends the pull credential to a registry
 as HTTP Basic when the registry challenges for it, or exchanges it for a bearer
 token.
@@ -68,12 +67,12 @@ token.
 Without such a permit, the runtime pulls an XR-chosen module anonymously or
 with its own Docker config. Mount a Docker config through a
 `DeploymentRuntimeConfig` and set `DOCKER_CONFIG`. Its credentials apply
-only to their registry host.
+to their registry host alone.
 
 The credential protects the pull, never the cache. The runtime caches a
 module's bytes by content digest and serves them, without a fetch, to any
 Composition on the runtime that states the digest, from an `OCI`, `HTTP` or
-`Path` source alike. A private module remains private only while no
+`Path` source alike. A private module remains private as long as no
 Composition another tenant can read quotes its digest. The runtime checks
 the credential at the first load of a digest in a process, for the module's
 bytes and its manifest alike, and the signature once per repository and
@@ -100,12 +99,12 @@ fetched modules across restarts
 ## Egress
 
 A module granted egress can forward its whole request to the hosts its
-rules allow, step credentials included. Only the
-policy layers grant egress: a manifest can request it, and an XR author
+rules allow, step credentials included. The
+policy layers alone grant egress: a manifest can request it, and an XR author
 can't widen it. Every request leaves an audit line with the module digest.
 
-Require signatures wherever egress is granted, so only code you've
-approved can send data out ([Signatures](signatures.md)).
+Require signatures wherever egress is granted, so that sending data out is the privilege of code you've
+approved ([Signatures](signatures.md)).
 
 ## Pinning
 

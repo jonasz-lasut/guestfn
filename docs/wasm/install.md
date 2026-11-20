@@ -17,7 +17,7 @@ The same package is published to `xpkg.upbound.io/jonasz-lasut/function-wasm`, f
 
 One installed function serves any number of modules: a Composition step puts its module reference in the step's Input, so adding a module needs no further install.
 
-Crossplane supports the three most recent minor releases, and function-wasm supports the same three. Pushing a release branch runs the end-to-end suite on all three, and a release is cut only when that run is green ([the release matrix](../project/testing.md#the-release-matrix) lists the versions).
+Crossplane supports the three most recent minor releases, and function-wasm supports the same three. Pushing a release branch runs the end-to-end suite on all three, and a release is cut when that run is green and not before ([the release matrix](../project/testing.md#the-release-matrix) lists the versions).
 
 ## Check the install
 
@@ -34,8 +34,8 @@ If it stays unhealthy, read the pod's logs and the Function's conditions (`kubec
 The function port speaks mTLS to Crossplane. `/metrics` on `8080` and the
 probes on `8081` are plain HTTP. Their answers contain no secret and no
 module name, and nothing authenticates a caller. The runtime closes a
-connection that hasn't sent its request within five seconds. Admit the ports only
-from where they're read. A `NetworkPolicy` on the function's pods, which
+connection that hasn't sent its request within five seconds. Admit the ports from nowhere but
+where they're read. A `NetworkPolicy` on the function's pods, which
 Crossplane labels `pkg.crossplane.io/function: function-wasm`, admits the
 metrics port from the monitoring namespace and leaves the probe port to the
 kubelet:
@@ -73,8 +73,8 @@ The function port isn't in the policy, so Crossplane keeps reaching it.
 A fresh install runs every module in the default sandbox, which gives a module no network, filesystem or environment beyond the request ([trust model](../operators/trust-model.md)).
 
 - Set flags, such as limits and caches, through a `DeploymentRuntimeConfig`: see [runtime flags](../operators/runtime-flags.md).
-- Keep the caches across restarts on a volume that only this Function's pods mount: see [cache storage](../operators/runtime-flags.md#cache-storage).
+- Keep the caches across restarts on a volume that this Function's pods alone mount: see [cache storage](../operators/runtime-flags.md#cache-storage).
 - Add readiness and liveness probes and pre-load modules: see [readiness and warm-up](../operators/readiness.md).
 - Require signed modules: see [signatures](../operators/signatures.md).
 - Allow a module more than the default sandbox, such as egress or a private `/tmp`: see the [grant policy](../operators/grant-policy.md).
-- Admit the metrics and probe ports only from their readers: see [the side ports](#the-side-ports).
+- Admit the metrics and probe ports from their readers alone: see [the side ports](#the-side-ports).

@@ -46,7 +46,7 @@ The fields:
   module, and at 0.x a minor may change anything. The runtime refuses a
   version its engine doesn't offer. The field was `abi`, an
   integer, through 0.6, and the old name is refused as unknown.
-- `oci`: what only an `oci@0.1` module says. `oci.image` is the
+- `oci`: what an `oci@0.1` module alone says. `oci.image` is the
   digest-pinned reference of the image it runs
   (`ghcr.io/acme/tagger@sha256:…`), which `guestfn push --image` writes into
   the published manifest, so the file may leave it out. `oci.args` are the
@@ -103,8 +103,8 @@ and no step credential.
 
 A manifest is a request. After the module loads, the runtime checks each
 `requires` entry against the Input's `compositionPolicy` and the operator's
-`--sandbox-policy-file`, and a capability is granted only when both permit
-it. The manifest can make a run fail earlier, with a message saying why. It
+`--sandbox-policy-file`, and a capability is granted when both permit
+it and in no other case. The manifest can make a run fail earlier, with a message saying why. It
 can't make a run possible or widen a grant.
 
 A required capability that a layer doesn't permit is a fatal result before

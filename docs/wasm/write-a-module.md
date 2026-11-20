@@ -28,8 +28,8 @@ into it and says so.
 
 The Go scaffold writes `fn.go`, `fn_test.go` and `main.go`. `fn.go` is a
 plain function-sdk-go `RunFunction` that composes a ConfigMap greeting the
-composite resource, with no code specific to WebAssembly. `main.go` only
-registers it:
+composite resource, with no code specific to WebAssembly. `main.go` does nothing but
+register it:
 
 ```go
 func init() {
@@ -103,7 +103,7 @@ from the manifest.
 
 `oras push ghcr.io/example/greeter:v0.1.0 fn.wasm:application/wasm
 guestfn.json:application/vnd.guestfn.manifest.v1+json` gives the same result.
-A `FROM scratch` image whose only layer copies the module to `/fn.wasm` works
+A `FROM scratch` image with one layer that copies the module to `/fn.wasm` works
 too, without a manifest. The runtime reads that exact path and doesn't search
 the archive.
 

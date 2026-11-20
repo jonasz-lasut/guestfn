@@ -6,7 +6,7 @@ runs, what the module can do and how a failure ends. It assumes you know
 [what function-wasm is](introduction.md). Each step links to the page with the
 detail.
 
-A module gets a capability only when three layers agree. The module's
+A module gets a capability when three layers agree, and not otherwise. The module's
 [manifest](guests/module-manifests.md) has to request it, and the
 Composition's `compositionPolicy` and the operator's policy, the Cedar file
 named by `--sandbox-policy-file`, both have to permit it. The
@@ -33,8 +33,8 @@ per repository and manifest digest per process and before any cache
 
 The runtime then looks the digest up in the compiled modules in memory (kept
 ten minutes after last use), the Wasmtime artifacts on disk and the fetched
-modules on disk. Only a module this pod has never seen is fetched, checked
-against its digest and compiled. A component that fails the world's typecheck
+modules on disk. The runtime fetches a module this pod has never seen, checks it
+against its digest and compiles it. Any other module skips these steps. A component that fails the world's typecheck
 is refused here, and so is a core module, the ABI v1 shape removed in 1.0.0.
 The stores are described under
 [cache storage](operators/runtime-flags.md#cache-storage). The
