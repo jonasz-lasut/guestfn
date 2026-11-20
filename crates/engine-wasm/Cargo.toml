@@ -49,7 +49,7 @@ wasmtime = { version = "50.0.2", default-features = false, features = [
 ] }
 # p1 stays off: the runtime serves components only (WASI 0.2 and 0.3), so
 # the preview1 host and its wiggle dependency are not built.
-wasmtime-wasi = { version = "50.0.2", default-features = false, features = ["p2", "p3"] }
+wasmtime-wasi = { version = "50.0.3", default-features = false, features = ["p2", "p3"] }
 # default-send-request stays off on purpose: the compiler then requires the
 # egress hooks implementation - a run can never fall through to an
 # unpoliced default HTTP client.
