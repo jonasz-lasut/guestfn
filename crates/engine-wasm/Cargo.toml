@@ -24,7 +24,7 @@ tracing.workspace = true
 # refuses, compiled out where the crate lets them be; see the Config in
 # wasm.rs). A wasmtime bump that adds a default feature is checked by hand
 # against this list.
-wasmtime = { version = "50.0.2", default-features = false, features = [
+wasmtime = { version = "50.0.3", default-features = false, features = [
     "addr2line",
     "anyhow",
     "async",
@@ -53,7 +53,7 @@ wasmtime-wasi = { version = "50.0.2", default-features = false, features = ["p2"
 # default-send-request stays off on purpose: the compiler then requires the
 # egress hooks implementation - a run can never fall through to an
 # unpoliced default HTTP client.
-wasmtime-wasi-http = { version = "50.0.2", default-features = false, features = ["p2", "p3"] }
+wasmtime-wasi-http = { version = "50.0.3", default-features = false, features = ["p2", "p3"] }
 # guestfn build's componentizing (componentize.rs) moves with wasmtime: the
 # wasip1 adapter is built in the wasmtime repository and published at its
 # version, so the adapter linked into a guest is always the one the
@@ -71,7 +71,7 @@ wasmtime-wasi-http = { version = "50.0.2", default-features = false, features = 
 #   cargo update wit-component@<old> --precise <new>
 # and the same for wit-parser and wasmparser (and wat, held in the lockfile
 # at wasmtime's wasm-encoder for the same reason).
-wasi-preview1-component-adapter-provider = "50.0.2"
+wasi-preview1-component-adapter-provider = "50.0.3"
 wasmparser = { version = ">=0.261", default-features = false }
 wit-component = ">=0.261"
 wit-parser = ">=0.261"
