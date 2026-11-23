@@ -614,7 +614,7 @@ fn init_never_references_a_release_older_than_its_own() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (_, _, functions) = init_ts(dir.path(), &["--repository", &repository]);
     assert!(
-        functions.contains(&format!("  package: {repository}:v1.0.2\n")),
+        functions.contains(&format!("  package: {repository}:v1.1.0\n")),
         "{functions}"
     );
 }
@@ -625,12 +625,12 @@ fn init_falls_back_to_its_own_release_and_says_why() {
     let repository = "127.0.0.1:1/jonasz-lasut/function-wasm";
     let (_, stderr, functions) = init_ts(dir.path(), &["--repository", repository]);
     assert!(
-        functions.contains(&format!("  package: {repository}:v1.0.2\n")),
+        functions.contains(&format!("  package: {repository}:v1.1.0\n")),
         "{functions}"
     );
     assert!(
         stderr.contains(&format!(
-            "example/functions.yaml references {repository}:v1.0.2, the release this guestfn was built with: cannot list the releases at {repository}: "
+            "example/functions.yaml references {repository}:v1.1.0, the release this guestfn was built with: cannot list the releases at {repository}: "
         )),
         "{stderr}"
     );
@@ -683,7 +683,7 @@ fn init_looks_nothing_up_offline_or_for_a_stated_version() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (_, stderr, functions) = init_ts(dir.path(), &["--repository", &repository, "--offline"]);
     assert!(
-        functions.contains(&format!("  package: {repository}:v1.0.2\n")),
+        functions.contains(&format!("  package: {repository}:v1.1.0\n")),
         "{functions}"
     );
     assert!(
@@ -694,10 +694,10 @@ fn init_looks_nothing_up_offline_or_for_a_stated_version() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (stdout, stderr, functions) = init_ts(
         dir.path(),
-        &["--repository", &repository, "--function-version", "1.1.0"],
+        &["--repository", &repository, "--function-version", "1.2.0"],
     );
     assert!(
-        functions.contains(&format!("  package: {repository}:v1.1.0\n")),
+        functions.contains(&format!("  package: {repository}:v1.2.0\n")),
         "{functions}"
     );
     assert!(!stdout.contains("references"), "{stdout}");
