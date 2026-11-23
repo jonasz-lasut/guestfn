@@ -62,7 +62,7 @@ kind: Function
 metadata:
   name: function-wasm
 spec:
-  package: ghcr.io/jonasz-lasut/function-wasm:v1.0.2
+  package: ghcr.io/jonasz-lasut/function-wasm:v1.1.0
 ```
 
 The package is also published at `xpkg.upbound.io/jonasz-lasut/function-wasm`.

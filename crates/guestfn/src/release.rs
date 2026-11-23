@@ -15,7 +15,7 @@ use crate::inspect::client_for;
 /// The function package a scaffold references when nothing newer is known.
 /// It holds the whole reference so the release procedure's search for
 /// `function-wasm:v` finds it.
-pub const FALLBACK_FUNCTION_PACKAGE: &str = "ghcr.io/jonasz-lasut/function-wasm:v1.0.2";
+pub const FALLBACK_FUNCTION_PACKAGE: &str = "ghcr.io/jonasz-lasut/function-wasm:v1.1.0";
 
 /// A function's tags are its versions behind a `v`.
 const TAG_PREFIX: &str = "v";
