@@ -886,6 +886,55 @@ fn a_tail_call_is_refused_at_compile() {
 }
 
 #[test]
+fn a_function_subtype_is_refused_at_compile() {
+    // The build has no gc feature, and its runtime subtype check aborts the
+    // process, so a declared subtype must never compile.
+    let e = Wasmtime::new(Config::default()).expect("engine");
+    let wasm = wat::parse_str(
+        r#"(component
+  (core module $m
+    (type $super (sub (func (result i32))))
+    (type $sub (sub $super (func (result i32))))
+    (memory (export "memory") 1)
+    (func (export "cabi_realloc") (param i32 i32 i32 i32) (result i32) i32.const 4096)
+    (func $f (type $sub) i32.const 64)
+    (table funcref (elem $f))
+    (func (export "run") (param i32 i32) (result i32)
+      i32.const 0 call_indirect (type $super)))
+  (core instance $i (instantiate $m))
+  (func (export "run") (param "request" (list u8)) (result (result (list u8) (error string)))
+    (canon lift (core func $i "run") (memory (core memory $i "memory")) (realloc (core func $i "cabi_realloc"))))
+)"#,
+    )
+    .expect("wat");
+    let err = e.compile(&wasm).expect_err("function subtype").to_string();
+    assert!(err.contains("gc proposal must be enabled"), "{err}");
+}
+
+#[test]
+fn a_typed_function_reference_is_refused_at_compile() {
+    let e = Wasmtime::new(Config::default()).expect("engine");
+    let wasm = wat::parse_str(
+        r#"(component
+  (core module $m
+    (type $t (func (result i32)))
+    (memory (export "memory") 1)
+    (func (export "cabi_realloc") (param i32 i32 i32 i32) (result i32) i32.const 4096)
+    (func $f (type $t) i32.const 64)
+    (elem declare func $f)
+    (func (export "run") (param i32 i32) (result i32)
+      ref.func $f call_ref $t))
+  (core instance $i (instantiate $m))
+  (func (export "run") (param "request" (list u8)) (result (result (list u8) (error string)))
+    (canon lift (core func $i "run") (memory (core memory $i "memory")) (realloc (core func $i "cabi_realloc"))))
+)"#,
+    )
+    .expect("wat");
+    let err = e.compile(&wasm).expect_err("call_ref").to_string();
+    assert!(err.starts_with("cannot compile module: "), "{err}");
+}
+
+#[test]
 fn the_ceiling_is_per_run_across_regions() {
     // Eight pages of ceiling. The prelude's four-page memory is charged at
     // instantiation; a table of 40,000 elements (320 KB on a 64-bit host)

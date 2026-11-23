@@ -264,13 +264,18 @@ impl Wasmtime {
         // plus extended const (componentize-py's output needs it) and
         // relaxed SIMD with its deterministic semantics, so a module
         // computes the same result on every host. Every other WebAssembly
-        // 3.0 proposal is refused at compile: threads and the GC set
-        // (GC, function references, exceptions) are compiled out, the
-        // crate features being off in Cargo.toml, and tail calls,
-        // multi-memory and memory64 are off here. None of the nine guests
+        // 3.0 proposal is refused at compile: threads and the GC types
+        // are compiled out, the crate features being off in Cargo.toml,
+        // and GC, function references, tail calls, multi-memory and
+        // memory64 are off here. A build without the gc feature still
+        // accepts function subtypes and typed function references unless
+        // they are switched off explicitly, and its runtime subtype check
+        // is a stub that aborts the process. None of the nine guests
         // the project builds uses any of them (measured with wasm-tools on
         // 2026-10-28, the 1.0 audit's F-8).
         wc.relaxed_simd_deterministic(true);
+        wc.wasm_gc(false);
+        wc.wasm_features(wasmtime::WasmFeatures::FUNCTION_REFERENCES, false);
         wc.wasm_tail_call(false);
         wc.wasm_multi_memory(false);
         wc.wasm_memory64(false);
