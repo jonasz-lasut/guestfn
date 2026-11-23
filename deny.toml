@@ -15,7 +15,22 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # there is one, fails on its own.
 yanked = "warn"
 # Each entry: { id = "RUSTSEC-YYYY-NNNN", reason = "why it does not apply" }.
-ignore = []
+ignore = [
+    # chrono is unmaintained, with no patched release to move to. No crate
+    # of the workspace names it. It comes in twice: cedar-policy-core's
+    # default `datetime` feature (Cedar's datetime and duration extension
+    # types) and pbjson-types, whose Timestamp and Duration are
+    # function-sdk-rust's well-known types. Both build it without default
+    # features, so its clock and local time zone code isn't compiled.
+    # The runtime builds cedar-policy with its default features, and
+    # building it without them wouldn't drop chrono: cedar-policy and
+    # cedar-policy-formatter take cedar-policy-core with its defaults
+    # (cedar-policy/cedar#2707). Remove the entry once neither needs
+    # chrono: a Cedar release that moved off it (#409), and
+    # function-sdk-rust on a pbjson-types release without it (#412,
+    # influxdata/pbjson#162).
+    { id = "RUSTSEC-2026-0543", reason = "transitive through cedar-policy-core (datetime) and pbjson-types, no patched release; neither path compiles chrono's clock" },
+]
 
 [licenses]
 version = 2
