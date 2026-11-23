@@ -49,7 +49,7 @@ wasmtime = { version = "51.0.0", default-features = false, features = [
 ] }
 # p1 stays off: the runtime serves components only (WASI 0.2 and 0.3), so
 # the preview1 host and its wiggle dependency are not built.
-wasmtime-wasi = { version = "50.0.2", default-features = false, features = ["p2", "p3"] }
+wasmtime-wasi = { version = "51.0.0", default-features = false, features = ["p2", "p3"] }
 # default-send-request stays off on purpose: the compiler then requires the
 # egress hooks implementation - a run can never fall through to an
 # unpoliced default HTTP client.
@@ -71,7 +71,7 @@ wasmtime-wasi-http = { version = "51.0.0", default-features = false, features = 
 #   cargo update wit-component@<old> --precise <new>
 # and the same for wit-parser and wasmparser (and wat, held in the lockfile
 # at wasmtime's wasm-encoder for the same reason).
-wasi-preview1-component-adapter-provider = "50.0.2"
+wasi-preview1-component-adapter-provider = "50.0.3"
 wasmparser = { version = ">=0.261", default-features = false }
 wit-component = ">=0.261"
 wit-parser = ">=0.261"
