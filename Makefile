@@ -35,7 +35,7 @@ endif
 # matrix's two pins down one minor in the same PR.
 KIND_CLUSTER_NAME ?= function-wasm-e2e
 # renovate: datasource=github-releases depName=crossplane/crossplane
-CROSSPLANE_VERSION ?= 2.4.3
+CROSSPLANE_VERSION ?= 2.5.0
 # renovate: datasource=github-releases depName=crossplane-contrib/provider-nop
 PROVIDER_NOP_VERSION ?= v0.6.0
 
