@@ -1,5 +1,5 @@
 # What fn.wasm was built from. `make e2e.guest` writes this file after
 # it builds the module; crates/engine-wasm/tests/committed_guest.rs
 # fails when the sources or the module no longer match it.
-sources sha256:cd3c7af8400bcda75db6c2d25ce79b3a8484ee7b6be85da135a139d83a0cfb51
+sources sha256:56fa849c85f3e9c64ea1bb2a33f3684b3f6570457493f783bf1fc6dd4c25666e
 fn.wasm sha256:b1e5117b136fb72103734b8d99c09ad6866c418ad282942b0bd7793b1ef736cc
