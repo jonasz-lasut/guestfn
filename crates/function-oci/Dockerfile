@@ -96,7 +96,7 @@ RUN set -eu; \
 
 # The image: crates/function-wasm/Dockerfile's base (see there), the runtime, and
 # the VM pieces under /usr/lib/guestfn, where the engine's flags default to.
-FROM cgr.dev/chainguard/glibc-dynamic:latest@sha256:838b58dceeba88a5dc8b088bca1a2e1e8e26ebe88d5e23a87137de09cc910e61 AS image
+FROM cgr.dev/chainguard/glibc-dynamic:latest@sha256:ae815f889199ee018b0072f05939ecef65b1b3a831d1c768fa82d1860f889942 AS image
 WORKDIR /
 COPY --from=build /function /function
 COPY --from=build /guestfn-init /usr/lib/guestfn/init
