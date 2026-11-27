@@ -41,8 +41,8 @@ jobs:
       # Installed from the release binary and checked against its digest
       # rather than through cargo-binstall's install script.
       # renovate: release-asset depName=bytecodealliance/wasm-pkg-tools
-      WKG_VERSION: v0.16.2
-      WKG_SHA256: 3cf5061a8743c87fb29ea999cb536fc3860d0413b41745ab8bd421d88ba736bd
+      WKG_VERSION: v0.16.3
+      WKG_SHA256: 6ab856bc447325e3ced12708af76357f31f8d4222208e2ae27371233dcb3a5f1
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
