@@ -10,7 +10,7 @@
 #
 # The base is that Dockerfile's (see there for why glibc-dynamic); Renovate
 # keeps both digests current.
-FROM cgr.dev/chainguard/glibc-dynamic:latest@sha256:a96ba3c8d5ffc646e1092c03d72000b5e2ccd9f6cda695d6342a0e31ce4d52ee
+FROM cgr.dev/chainguard/glibc-dynamic:latest@sha256:db4aee413b04fe11b03de02385e3ae184eaf5c91d92ec413daf71416561a79e8
 WORKDIR /
 COPY function /function
 EXPOSE 9443
